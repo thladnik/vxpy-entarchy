@@ -6,8 +6,8 @@ import tifffile
 torch = pytest.importorskip('torch', reason='the cmn analysis module imports torch at module level')
 
 from entarchy.backend import SQLiteBackend
-from entarchy_vxpy_suite2p.analysis.cmn import analysis, functions
-from entarchy_vxpy_suite2p.schema import Roi, Suite2PVxPy
+from vxentarchy.analysis.cmn import analysis, functions
+from vxentarchy.schema import Roi, Suite2PVxPy
 
 import _synthetic_data
 
@@ -143,7 +143,7 @@ class TestProcessRecordingGuards:
     def test_recording_without_imaging_is_skipped(self, tmp_path, capsys):
         """A recording may legitimately have no imaging, and this analysis is
         about calcium signals."""
-        from entarchy_vxpy_suite2p.schema import Animal, Recording
+        from vxentarchy.schema import Animal, Recording
 
         base = (tmp_path / 'partial').as_posix()
         ent = Suite2PVxPy.create(base, SQLiteBackend(base, dbname='partial.db'))

@@ -3,7 +3,7 @@ requires      = ["setuptools>=65.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "entarchy_vxpy_suite2p"
+name = "vxentarchy"
 version = "0.1"
 description = ""
 readme = "README.md"
@@ -63,14 +63,14 @@ dev = [
 ]
 
 [project.scripts]
-entarchy-vxpy = 'entarchy_vxpy_suite2p.cli:main'
+vxentarchy = 'vxentarchy.cli:main'
 
 [tool.setuptools.packages.find]
 where = ['.']
-include = ['entarchy_vxpy_suite2p*']
+include = ['vxentarchy*']
 
 [project.urls]
-Homepage = 'https://github.com/thladnik/entarchy_vxpy_suite2p'
+Homepage = 'https://github.com/thladnik/vxpy-entarchy'
 
 [tool.pytest.ini_options]
 testpaths = ['tests']

@@ -18,7 +18,7 @@ entarchies will not open; `_implementation_version` goes to 0.3 and says so.
 
 Seven places, in the order `add_recording` hits them.
 
-**1. The sync signal is a galvo mirror.** [schema.py:308](../../entarchy_vxpy_suite2p/schema.py#L308)
+**1. The sync signal is a galvo mirror.** [schema.py:308](../../vxentarchy/schema.py#L308)
 opens `Io.hdf5` and runs `frame_time_methods[sync_type]` over `ai_y_mirror_in`
 before anything else happens. There is no path through the function that skips
 it. `frame_time_methods` is already a registry of two, which is the one piece of
@@ -41,7 +41,7 @@ instrument and meaningless for a light-sheet stack or a single-plane camera.
 derived from imaging frame times. A recording with two imaging sources has
 nowhere to put two of each; a recording with none has nothing to put there.
 
-**5. Phases are indexed in imaging frames.** [schema.py:409](../../entarchy_vxpy_suite2p/schema.py#L409)
+**5. Phases are indexed in imaging frames.** [schema.py:409](../../vxentarchy/schema.py#L409)
 gives every Phase a `ca_start_index` and `ca_end_index`, computed from
 `record_group_ids` interpolated onto the first layer's frame times. So **Phase
 entities cannot be created without imaging**, even though a stimulation phase is
@@ -264,7 +264,7 @@ extraction, not part of it.
 
 ## Two names that will be wrong afterwards
 
-The package is called `entarchy_vxpy_suite2p`. If suite2p is one source among
+The package is called `vxentarchy`. If suite2p is one source among
 several, the name says something untrue about what the package is for.
 `entarchy_vxpy` is the honest name, and renaming is cheapest now rather than
 after the imports are in more places.

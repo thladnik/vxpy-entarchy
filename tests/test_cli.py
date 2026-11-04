@@ -7,8 +7,8 @@ import os
 
 import pytest
 
-from entarchy_vxpy_suite2p.cli import main
-from entarchy_vxpy_suite2p.schema import Animal, Experiment, Recording, Roi, Suite2PVxPy
+from vxentarchy.cli import main
+from vxentarchy.schema import Animal, Experiment, Recording, Roi, Suite2PVxPy
 
 import _synthetic_data
 

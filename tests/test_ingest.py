@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from entarchy.backend import SQLiteBackend
-from entarchy_vxpy_suite2p.schema import (Animal, Experiment, Imaging, ImagingSource,
+from vxentarchy.schema import (Animal, Experiment, Imaging, ImagingSource,
                                           ImagingSpec, Layer, Phase, Recording, Roi,
                                           Suite2PVxPy, imaging_sources,
                                           is_recording_folder, scan_experiment)
@@ -284,7 +284,7 @@ class TestTheImagingChoiceCannotSilentlyChange:
                                                                  dataset):
         """Otherwise the guard cries wolf at the spelling rather than the
         choice, and somebody learns to work around it."""
-        from entarchy_vxpy_suite2p.schema import SyncSignalTiming
+        from vxentarchy.schema import SyncSignalTiming
 
         ent.add_experiment(dataset['root'], imaging=ImagingSpec(source='suite2p'),
                            skip_broken=False)
@@ -299,7 +299,7 @@ class TestTheImagingChoiceCannotSilentlyChange:
     def test_a_different_timing_is_refused(self, ent, dataset):
         """The guard fires before anything is ingested, so the second choice
         only has to be nameable rather than readable off this fixture."""
-        from entarchy_vxpy_suite2p.schema import ClockDivisionTiming
+        from vxentarchy.schema import ClockDivisionTiming
 
         ent.add_experiment(dataset['root'], imaging=ImagingSpec(source='suite2p'),
                            skip_broken=False)
@@ -346,7 +346,7 @@ class TestImagingChoiceIsRecorded:
     """How frames were timed cannot be detected, so it has to be written down."""
 
     def test_an_explicit_timing_is_stored_on_the_experiment(self, ent, dataset):
-        from entarchy_vxpy_suite2p.schema import SyncSignalTiming
+        from vxentarchy.schema import SyncSignalTiming
 
         spec = ImagingSpec(source='suite2p',
                            timing=SyncSignalTiming(method='y_mirror',
@@ -395,7 +395,7 @@ class TestImagingChoiceIsRecorded:
         assert len(experiment.rois) == 0
 
     def test_timing_config_covers_every_timing(self):
-        from entarchy_vxpy_suite2p.schema import (CameraTiming, ClockDivisionTiming,
+        from vxentarchy.schema import (CameraTiming, ClockDivisionTiming,
                                                   SyncSignalTiming)
 
         assert SyncSignalTiming(method='y_mirror').config == {

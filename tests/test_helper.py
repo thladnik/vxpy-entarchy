@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from entarchy_vxpy_suite2p.analysis.cmn import helper
+from vxentarchy.analysis.cmn import helper
 
 
 class TestSphericalCoordinates:

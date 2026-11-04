@@ -68,7 +68,7 @@ def mirror_trace():
 
 def expected_frame_times():
     """Frame times the ingest is expected to reconstruct from the mirror trace."""
-    from entarchy_vxpy_suite2p.schema import ca_frame_times_from_y_mirror
+    from vxentarchy.schema import ca_frame_times_from_y_mirror
 
     position, times = mirror_trace()
     return ca_frame_times_from_y_mirror(position, times)[1]

@@ -4,7 +4,7 @@ import pytest
 
 torch = pytest.importorskip('torch', reason='the cmn analysis module imports torch at module level')
 
-from entarchy_vxpy_suite2p.analysis.cmn import functions
+from vxentarchy.analysis.cmn import functions
 
 
 def reference_baseline(fluorescence, window_size, percentile):

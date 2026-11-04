@@ -7,8 +7,8 @@ import yaml
 import h5py
 
 import entarchy
-from entarchy_vxpy_suite2p import schema
-from entarchy_vxpy_suite2p.schema import (Animal, ClockDivisionTiming, Experiment,
+from vxentarchy import schema
+from vxentarchy.schema import (Animal, ClockDivisionTiming, Experiment,
                                           Imaging, Layer,
                                           Phase, Recording, Roi, Suite2PVxPy,
                                           ca_frame_times_from_sync_toggle,
@@ -36,7 +36,7 @@ class TestHierarchyDeclaration:
         assert Roi.get_child_entity_types() is None
 
     def test_collection_types_are_registered(self):
-        from entarchy_vxpy_suite2p.schema import (AnimalCollection,
+        from vxentarchy.schema import (AnimalCollection,
                                                   ExperimentCollection,
                                                   ImagingCollection,
                                                   LayerCollection, PhaseCollection,

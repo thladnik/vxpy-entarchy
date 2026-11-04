@@ -1,8 +1,8 @@
 """Command line ingest: make an entarchy, and put experiments into it.
 
-    python -m entarchy_vxpy_suite2p create /data/entarchy
-    python -m entarchy_vxpy_suite2p add /data/entarchy /raw/cmn
-    python -m entarchy_vxpy_suite2p scan /raw/cmn
+    python -m vxentarchy create /data/entarchy
+    python -m vxentarchy add /data/entarchy /raw/cmn
+    python -m vxentarchy scan /raw/cmn
 
 `add` is the whole of an experiment folder - `<experiment>/<animal>/<recording>`
 - and may be run again whenever the folder has grown, since animals and
@@ -10,7 +10,7 @@ recordings already in the entarchy are skipped.
 
 Frame timing cannot be detected and is named here rather than guessed:
 
-    python -m entarchy_vxpy_suite2p add /data/entarchy /raw/rot_trans \\
+    python -m vxentarchy add /data/entarchy /raw/rot_trans \\
         --imaging suite2p --timing clock-division --edges-per-volume 7.5 \\
         --signal di_frame_sync
 
@@ -209,7 +209,7 @@ def _scan(args) -> int:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
-        prog='python -m entarchy_vxpy_suite2p',
+        prog='python -m vxentarchy',
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     subparsers = parser.add_subparsers(dest='command', required=True)
 

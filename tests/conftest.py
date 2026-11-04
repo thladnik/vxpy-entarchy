@@ -17,6 +17,6 @@ def rng():
 @pytest.fixture()
 def unit_sphere_points():
     """Deterministic set of unit vectors covering the sphere."""
-    from entarchy_vxpy_suite2p.analysis.cmn.helper import IcosahedronSphere
+    from vxentarchy.analysis.cmn.helper import IcosahedronSphere
 
     return IcosahedronSphere(subdiv_lvl=1).get_vertices().astype(np.float64)

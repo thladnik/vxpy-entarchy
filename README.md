@@ -43,9 +43,9 @@ ent.add_recording(animal, '/data/cmn/2024-08-02_fish1/rec_01')
 ### From the command line
 
 ```bash
-python -m entarchy_vxpy_suite2p create /data/entarchy
-python -m entarchy_vxpy_suite2p add /data/entarchy /raw/cmn
-python -m entarchy_vxpy_suite2p scan /raw/cmn
+python -m vxentarchy create /data/entarchy
+python -m vxentarchy add /data/entarchy /raw/cmn
+python -m vxentarchy scan /raw/cmn
 ```
 
 `add` takes `--name`, `--limit`, `--no-video`, `--dry-run`, `--stop-on-error`, and
@@ -56,7 +56,7 @@ nothing.
 Frame timing is named rather than guessed:
 
 ```bash
-python -m entarchy_vxpy_suite2p add /data/entarchy /raw/rot_trans \
+python -m vxentarchy add /data/entarchy /raw/rot_trans \
     --imaging suite2p --timing clock-division \
     --edges-per-volume 7.5 --signal di_frame_sync
 ```
