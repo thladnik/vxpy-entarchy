@@ -22,8 +22,7 @@ rest of what the CMN receptive field analysis needs.
 A whole experiment folder goes in with one call:
 
 ```python
-ent = Suite2PVxPy.open_or_create(analysis_path, 'SQLiteBackend',
-                                 {'dbname': 'entarchy.db'})
+ent = Suite2PVxPy.open_or_create(analysis_path)
 ent.add_experiment('/data/cmn')
 ```
 
