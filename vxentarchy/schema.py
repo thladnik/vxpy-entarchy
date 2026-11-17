@@ -489,8 +489,7 @@ class Suite2pSource(ImagingSource):
 
         for layer_str in layer_names:
 
-            layer = Layer(ent, _id=layer_str, _parent=imaging)
-            ent.add_new_entity(layer)
+            layer = imaging.add_child(Layer, layer_str)
             print(f'> Process {layer}')
 
             s2p_path = os.path.join(path, 'suite2p', layer_str)
@@ -532,8 +531,7 @@ class Suite2pSource(ImagingSource):
 
             print('>> Add ROI stats and signals')
             for roi_idx in tqdm.tqdm(range(fluorescence.shape[0])):
-                roi = Roi(ent, _id=f'Roi_{roi_idx}', _parent=layer)
-                ent.add_new_entity(roi)
+                roi = layer.add_child(Roi, f'Roi_{roi_idx}')
                 roi['index'] = roi_idx
 
                 # suite2p's own vocabulary, kept where it cannot be mistaken for
@@ -900,8 +898,7 @@ class Suite2PVxPy(entarchy.Entarchy):
 
         with self:
             print(f'> Create new entity for experiment {experiment}')
-            entity = Experiment(self, _id=experiment, _parent=self.root)
-            self.add_new_entity(entity)
+            entity = self.root.add_child(Experiment, experiment)
 
         return entity
 
@@ -939,8 +936,7 @@ class Suite2PVxPy(entarchy.Entarchy):
 
             # Create new animal entity
             print(f'>> Create new entity for animal {animal_id}')
-            animal = Animal(self, _id=animal_id, _parent=experiment)
-            self.add_new_entity(animal)
+            animal = experiment.add_child(Animal, animal_id)
 
             # Search for zstacks
             zstack_names = []
@@ -1119,8 +1115,7 @@ class Suite2PVxPy(entarchy.Entarchy):
                         if phase_index in phase_data:
                             phase = phase_data[phase_index]
                         else:
-                            phase = Phase(self, _id=key1, _parent=recording)
-                            self.add_new_entity(phase)
+                            phase = recording.add_child(Phase, key1)
                             phase_data[phase_index] = phase
                             phase['index'] = phase_index
 
@@ -1280,8 +1275,7 @@ class Suite2PVxPy(entarchy.Entarchy):
                 f'Use imaging="auto" to ingest whatever is there, or None to skip it.')
 
         print(f'> Add imaging source {spec.name} ({spec.source.name})')
-        imaging = Imaging(self, _id=spec.name, _parent=recording)
-        self.add_new_entity(imaging)
+        imaging = recording.add_child(Imaging, spec.name)
         imaging['method'] = spec.source.name
         imaging['layer_num'] = len(layer_names)
 
@@ -1369,8 +1363,7 @@ class Suite2PVxPy(entarchy.Entarchy):
             record_groups = self._read_record_groups(path)
 
             # Create new recording entity
-            recording = Recording(self, _id=recording_id, _parent=animal)
-            self.add_new_entity(recording)
+            recording = animal.add_child(Recording, recording_id)
             print(f'> Create {recording}')
 
             # Add metadata
