@@ -7,7 +7,7 @@ import pytest
 from entarchy.backend import SQLiteBackend
 from vxentarchy.schema import (Animal, Experiment, Imaging, ImagingSource,
                                           ImagingSpec, Layer, Phase, Recording, Roi,
-                                          Suite2PVxPy, imaging_sources,
+                                          VxEntarchy, imaging_sources,
                                           is_recording_folder, scan_experiment)
 
 import _synthetic_data
@@ -23,7 +23,7 @@ def dataset(tmp_path):
 @pytest.fixture()
 def ent(tmp_path):
     base = (tmp_path / 'archy').as_posix()
-    entarchy_obj = Suite2PVxPy.create(base, SQLiteBackend(base, dbname='ingest.db'))
+    entarchy_obj = VxEntarchy.create(base, SQLiteBackend(base, dbname='ingest.db'))
     yield entarchy_obj
     entarchy_obj.backend.close()
 
@@ -200,7 +200,7 @@ class TestAddExperiment:
         def explode(*args, **kwargs):
             raise RuntimeError('this recording is broken')
 
-        monkeypatch.setattr(Suite2PVxPy, 'add_recording', explode)
+        monkeypatch.setattr(VxEntarchy, 'add_recording', explode)
         experiment = ent.add_experiment(dataset['root'])
 
         # The animal still went in; only its recording failed
@@ -211,7 +211,7 @@ class TestAddExperiment:
         def explode(*args, **kwargs):
             raise RuntimeError('this recording is broken')
 
-        monkeypatch.setattr(Suite2PVxPy, 'add_recording', explode)
+        monkeypatch.setattr(VxEntarchy, 'add_recording', explode)
 
         with pytest.raises(RuntimeError, match='this recording is broken'):
             ent.add_experiment(dataset['root'], skip_broken=False)
@@ -1224,5 +1224,5 @@ class TestSourceContract:
                               imaging=ImagingSpec(source=BrokenSource(), name='broken'))
 
     def test_the_contract_is_declared(self):
-        assert Suite2PVxPy.ROI_REQUIRED == ('index', 'fluorescence')
-        assert 'is_unit' in Suite2PVxPy.ROI_OPTIONAL
+        assert VxEntarchy.ROI_REQUIRED == ('index', 'fluorescence')
+        assert 'is_unit' in VxEntarchy.ROI_OPTIONAL

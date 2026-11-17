@@ -10,7 +10,7 @@ import entarchy
 from vxentarchy import schema
 from vxentarchy.schema import (Animal, ClockDivisionTiming, Experiment,
                                           Imaging, Layer,
-                                          Phase, Recording, Roi, Suite2PVxPy,
+                                          Phase, Recording, Roi, VxEntarchy,
                                           ca_frame_times_from_sync_toggle,
                                           ca_frame_times_from_y_mirror,
                                           frame_time_methods, unravel_dict)
@@ -19,7 +19,7 @@ from vxentarchy.schema import (Animal, ClockDivisionTiming, Experiment,
 class TestHierarchyDeclaration:
 
     def test_resolved_hierarchy(self):
-        hierarchy, entity_map = Suite2PVxPy._declared_hierarchy()
+        hierarchy, entity_map = VxEntarchy._declared_hierarchy()
 
         assert hierarchy['Experiment'] == {'Animal': {
             'Recording': {'Imaging': {'Layer': {'Roi': {}}}, 'Phase': {}}}}
@@ -54,7 +54,7 @@ class TestHierarchyDeclaration:
             assert issubclass(entity_type, entarchy.Entity)
 
     def test_version_is_declared(self):
-        assert Suite2PVxPy._implementation_version in Suite2PVxPy._implementation_compat_version_list
+        assert VxEntarchy._implementation_version in VxEntarchy._implementation_compat_version_list
 
 
 class TestUnravelDict:

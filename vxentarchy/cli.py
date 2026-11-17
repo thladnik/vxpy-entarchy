@@ -25,13 +25,15 @@ import os
 import sys
 
 from .schema import (CameraTiming, ClockDivisionTiming, ImagingSpec,
-                     Suite2PVxPy, SyncSignalTiming, scan_experiment)
+                     VxEntarchy, SyncSignalTiming, scan_experiment)
 
 CONFIG_NAME = 'entarchy.yaml'
 
 
 def _add_backend_options(parser):
-    group = parser.add_argument_group('backend', 'only used when creating')
+    group = parser.add_argument_group(
+        'backend', 'only used when creating; without any of these the entarchy '
+                   'is an SQLite database, entarchy.db, in the directory')
     group.add_argument('--backend', choices=['sqlite', 'mysql'], default='sqlite')
     group.add_argument('--dbname', default=None,
                        help='database file for sqlite (default entarchy.db), '
@@ -40,7 +42,7 @@ def _add_backend_options(parser):
     group.add_argument('--dbuser', default=None, help='mysql only')
 
 
-def _backend_config(args) -> tuple[str, dict]:
+def _backend_config(args) -> tuple[str, dict | None]:
     """The backend name and its configuration, as create() takes them.
 
     A mysql password is never taken as an argument - it would end up in the
@@ -48,7 +50,15 @@ def _backend_config(args) -> tuple[str, dict]:
     ENTARCHY_DB_PASSWORD or asks.
     """
     if args.backend == 'sqlite':
-        return 'SQLiteBackend', {'dbname': args.dbname or 'entarchy.db'}
+        if args.dbhost or args.dbuser:
+            raise SystemExit('--dbhost and --dbuser are for --backend mysql.')
+        # entarchy's own default, entarchy.db, unless a name is given
+        return 'SQLiteBackend', {'dbname': args.dbname} if args.dbname else None
+
+    missing = [flag for flag, value in (('--dbname', args.dbname), ('--dbhost', args.dbhost),
+                                        ('--dbuser', args.dbuser)) if not value]
+    if missing:
+        raise SystemExit(f'--backend mysql needs {", ".join(missing)}.')
 
     return 'MySQLBackend', {'dbname': args.dbname, 'dbhost': args.dbhost,
                             'dbuser': args.dbuser}
@@ -134,16 +144,16 @@ def _print_contents(folder: str, contents: list) -> None:
           f'{sum(len(r) for _, r in contents)} recordings')
 
 
-def _open(args) -> Suite2PVxPy:
+def _open(args) -> VxEntarchy:
     if os.path.exists(os.path.join(args.entarchy, CONFIG_NAME)):
-        return Suite2PVxPy(args.entarchy)
+        return VxEntarchy(args.entarchy)
 
     if not args.create:
         raise SystemExit(
             f'No entarchy at {args.entarchy}. Make one with "create", or pass '
             f'--create to make it here.')
 
-    return Suite2PVxPy.open_or_create(args.entarchy, *_backend_config(args))
+    return VxEntarchy.open_or_create(args.entarchy, *_backend_config(args))
 
 
 def _create(args) -> int:
@@ -151,7 +161,7 @@ def _create(args) -> int:
         raise SystemExit(f'There is already an entarchy at {args.entarchy}.')
 
     backend, config = _backend_config(args)
-    ent = Suite2PVxPy.create(args.entarchy, backend, config)
+    ent = VxEntarchy.create(args.entarchy, backend, config)
 
     print(f'\nCreated {args.entarchy} ({backend})')
     ent.backend.close()

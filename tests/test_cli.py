@@ -8,7 +8,7 @@ import os
 import pytest
 
 from vxentarchy.cli import main
-from vxentarchy.schema import Animal, Experiment, Recording, Roi, Suite2PVxPy
+from vxentarchy.schema import Animal, Experiment, Recording, Roi, VxEntarchy
 
 import _synthetic_data
 
@@ -25,7 +25,7 @@ def destination(tmp_path):
 
 def opened(path):
     """The entarchy at `path`, for a test to read and close."""
-    return Suite2PVxPy(path)
+    return VxEntarchy(path)
 
 
 class TestCreate:
@@ -169,7 +169,7 @@ class TestAdd:
         def explode(*args, **kwargs):
             raise RuntimeError('this recording is broken')
 
-        monkeypatch.setattr(Suite2PVxPy, 'add_recording', explode)
+        monkeypatch.setattr(VxEntarchy, 'add_recording', explode)
 
         assert main(['add', destination, dataset['root']]) == 1
 
@@ -213,3 +213,21 @@ class TestTimingOptions:
                   '--imaging', 'suite2p', '--timing', 'clock-division'])
 
         assert not os.path.exists(destination)
+
+
+class TestBackendOptions:
+
+    def test_the_default_is_sqlite_in_the_directory(self, destination):
+        main(['create', destination])
+
+        assert os.path.exists(os.path.join(destination, 'entarchy.db'))
+
+    def test_mysql_needs_its_connection_options(self, destination):
+        with pytest.raises(SystemExit, match=r'--backend mysql needs --dbname, --dbhost, --dbuser'):
+            main(['create', destination, '--backend', 'mysql'])
+
+        assert not os.path.exists(destination)
+
+    def test_mysql_options_under_sqlite_are_refused(self, destination):
+        with pytest.raises(SystemExit, match='for --backend mysql'):
+            main(['create', destination, '--dbhost', 'localhost'])

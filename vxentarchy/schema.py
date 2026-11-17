@@ -16,7 +16,7 @@ import yaml
 import entarchy
 
 
-__all__ = ['Suite2PVxPy',
+__all__ = ['VxEntarchy',
            'Experiment', 'Animal', 'Recording', 'Imaging', 'Layer', 'Roi', 'Phase',
            'ExperimentCollection', 'AnimalCollection', 'RecordingCollection',
            'ImagingCollection', 'LayerCollection', 'RoiCollection', 'PhaseCollection',
@@ -439,7 +439,7 @@ class CameraTiming(FrameTiming):
 class ImagingSource:
     """Where signals come from: what is on disk and how to read it.
 
-    An implementation must write the ROI contract - Suite2PVxPy.ROI_REQUIRED -
+    An implementation must write the ROI contract - VxEntarchy.ROI_REQUIRED -
     whatever its own vocabulary is. Anything else it knows stays namespaced
     under its own name, as suite2p's stats do under `s2p/`.
     """
@@ -692,7 +692,7 @@ def scan_experiment(path: str) -> list[tuple[str, list[str]]]:
     return contents
 
 
-class Suite2PVxPy(entarchy.Entarchy):
+class VxEntarchy(entarchy.Entarchy):
 
     # 0.3 put an Imaging entity between Recording and Layer, so that imaging is
     #  one source among possibly several rather than a property of the recording

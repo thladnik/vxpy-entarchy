@@ -7,7 +7,7 @@ torch = pytest.importorskip('torch', reason='the cmn analysis module imports tor
 
 from entarchy.backend import SQLiteBackend
 from vxentarchy.analysis.cmn import analysis, functions
-from vxentarchy.schema import Roi, Suite2PVxPy
+from vxentarchy.schema import Roi, VxEntarchy
 
 import _synthetic_data
 
@@ -17,7 +17,7 @@ EXPERIMENT = 'experiment_01'
 @pytest.fixture()
 def ingested(tmp_path):
     base = (tmp_path / 'archy').as_posix()
-    ent = Suite2PVxPy.create(base, SQLiteBackend(base, dbname='analysis.db'))
+    ent = VxEntarchy.create(base, SQLiteBackend(base, dbname='analysis.db'))
 
     dataset = _synthetic_data.build_dataset((tmp_path / 'data').as_posix())
     animal = ent.add_animal(EXPERIMENT, dataset['animal_path'])
@@ -146,7 +146,7 @@ class TestProcessRecordingGuards:
         from vxentarchy.schema import Animal, Recording
 
         base = (tmp_path / 'partial').as_posix()
-        ent = Suite2PVxPy.create(base, SQLiteBackend(base, dbname='partial.db'))
+        ent = VxEntarchy.create(base, SQLiteBackend(base, dbname='partial.db'))
         try:
             with ent:
                 animal = Animal(ent, _id='a', _parent=ent.root)

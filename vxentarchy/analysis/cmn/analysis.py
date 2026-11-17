@@ -18,7 +18,7 @@ def create(analysis_path: str, recreate: bool = False, **kwargs):
 
     # Delete analysis
     if recreate:
-        Suite2PVxPy(analysis_path).delete()
+        VxEntarchy(analysis_path).delete()
 
     # Create analysis
     dbhost = kwargs.get('dbhost')
@@ -28,7 +28,7 @@ def create(analysis_path: str, recreate: bool = False, **kwargs):
 
     _backend = entarchy.backend.MySQLBackend(dbhost=dbhost, dbname=dbname, dbuser=dbuser, dbpassword=dbpassword)
 
-    Suite2PVxPy.create(analysis_path, _backend)
+    VxEntarchy.create(analysis_path, _backend)
 
 
 # def digest_new_data(analysis_path: str, data_root_path: str, **kwargs):
@@ -45,7 +45,7 @@ def create(analysis_path: str, recreate: bool = False, **kwargs):
 #                                 frame_avg_num=frame_avg_num)
 
 
-def run(ent: Suite2PVxPy):
+def run(ent: VxEntarchy):
 
     # Process recordings
     recordings = ent.get(Recording, 'NOT(EXIST(time_resampled))')
