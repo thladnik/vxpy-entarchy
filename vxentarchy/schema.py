@@ -701,7 +701,7 @@ class Suite2PVxPy(entarchy.Entarchy):
     _implementation_compat_version_list = ['0.4']
     _implementation_version = '0.4'
 
-    _hierarchy_root_type = Experiment
+    _entity_types = (Experiment,)
 
     def add_experiment(self, path: str, imaging='auto', name: str = None,
                        with_video: bool = True, skip_broken: bool = True,

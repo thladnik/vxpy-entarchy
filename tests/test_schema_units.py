@@ -19,7 +19,7 @@ from vxentarchy.schema import (Animal, ClockDivisionTiming, Experiment,
 class TestHierarchyDeclaration:
 
     def test_resolved_hierarchy(self):
-        hierarchy, entity_map = Suite2PVxPy._resolve_hierarchy()
+        hierarchy, entity_map = Suite2PVxPy._declared_hierarchy()
 
         assert hierarchy['Experiment'] == {'Animal': {
             'Recording': {'Imaging': {'Layer': {'Roi': {}}}, 'Phase': {}}}}
