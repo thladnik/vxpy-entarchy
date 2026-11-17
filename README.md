@@ -6,6 +6,17 @@ on top of
 suite2p output, and implements the contiguous-motion-noise (CMN) receptive field
 analysis in `analysis/cmn`.
 
+### Installation
+
+```sh
+pip install vxentarchy
+```
+
+This installs [entarchy](https://pypi.org/project/entarchy/) with it and puts a
+`vxentarchy` command on the path (`vxentarchy --help`; the same as
+`python -m vxentarchy`). `pip install "vxentarchy[cmn]"` adds `torch` and the
+rest of what the CMN receptive field analysis needs.
+
 ### Ingest
 
 A whole experiment folder goes in with one call:
@@ -165,11 +176,11 @@ Adding a source means implementing `ImagingSource` — `detect`, `layer_names`,
 `ingest` — and registering it in `imaging_sources`. Frame timing is a separate
 interface (`FrameTiming`), because how a scanner was timed and what read its
 output are independent choices. The reasoning is in
-[the proposal](docs/proposals/imaging-sources.md).
+[the proposal](https://github.com/thladnik/vxpy-entarchy/blob/master/docs/proposals/imaging-sources.md).
 
 ### Example notebook
 
-[`examples/01_synthetic_dataset.ipynb`](examples/01_synthetic_dataset.ipynb)
+[`examples/01_synthetic_dataset.ipynb`](https://github.com/thladnik/vxpy-entarchy/blob/master/examples/01_synthetic_dataset.ipynb)
 builds a small entarchy in this schema with synthetic calcium imaging data, then
 works through querying it, DataFrames, parallel analysis with `map_async`, links
 between entities, and archiving. It needs no experimental data and runs in about
