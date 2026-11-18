@@ -1076,12 +1076,12 @@ class FakeSource(ImagingSource):
         frame_times = frame_times_by_layer[0].squeeze()
 
         for layer_index, layer_name in enumerate(self.layer_names(path)):
-            layer = Layer(ent, _id=layer_name, _parent=imaging)
+            layer = Layer(_entarchy=ent, _id=layer_name, _parent=imaging)
             ent.add_new_entity(layer)
             layer['index'] = layer_index
 
             for roi_index in range(2):
-                roi = Roi(ent, _id=f'Roi_{roi_index}', _parent=layer)
+                roi = Roi(_entarchy=ent, _id=f'Roi_{roi_index}', _parent=layer)
                 ent.add_new_entity(roi)
                 roi['index'] = roi_index
                 roi['fluorescence'] = np.arange(len(frame_times), dtype=float)
@@ -1096,9 +1096,9 @@ class BrokenSource(FakeSource):
 
     def ingest(self, imaging, path, frame_times_by_layer, options):
         ent = imaging.entarchy
-        layer = Layer(ent, _id='plane0', _parent=imaging)
+        layer = Layer(_entarchy=ent, _id='plane0', _parent=imaging)
         ent.add_new_entity(layer)
-        roi = Roi(ent, _id='Roi_0', _parent=layer)
+        roi = Roi(_entarchy=ent, _id='Roi_0', _parent=layer)
         ent.add_new_entity(roi)
         roi['index'] = 0
 

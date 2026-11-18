@@ -1445,7 +1445,7 @@ class VxEntarchy(entarchy.Entarchy):
     #
     #         # for i in tqdm.tqdm(range(3), desc='Animals', position=0):
     #         for i in range(3):
-    #             animal = Animal(self, _id=f'Animal_{i}', _parent=self.root)
+    #             animal = Animal(_entarchy=self, _id=f'Animal_{i}', _parent=self.root)
     #             print(f'Add {animal}')
     #             for k, v in {'age': random.randint(24, 96),
     #                          'weight': random.randint(20, 100) / 10,
@@ -1457,7 +1457,7 @@ class VxEntarchy(entarchy.Entarchy):
     #
     #             # for j in tqdm.tqdm(range(7), desc='Recordings', position=1, leave=False):
     #             for j in range(random.randint(2, 4)):
-    #                 recording = Recording(self, _id=f'Recording_{j}', _parent=animal)
+    #                 recording = Recording(_entarchy=self, _id=f'Recording_{j}', _parent=animal)
     #                 print(f'> Add {recording}')
     #                 self.add_new_entity(recording)
     #
@@ -1480,7 +1480,7 @@ class VxEntarchy(entarchy.Entarchy):
     #                 p_num = 300
     #                 print(f'>> Add {p_num} Phases')
     #                 for p in range(p_num):
-    #                     phase = Phase(self, _id=f'Phase_{p}', _parent=recording)
+    #                     phase = Phase(_entarchy=self, _id=f'Phase_{p}', _parent=recording)
     #                     self.add_new_entity(phase)
     #
     #                     for jj in range(5):
@@ -1497,14 +1497,14 @@ class VxEntarchy(entarchy.Entarchy):
     #                 for li in range(5):
     #
     #                     print('>> Add Layer', li)
-    #                     layer = Layer(self, _id=f'Layer_{li}', _parent=recording)
+    #                     layer = Layer(_entarchy=self, _id=f'Layer_{li}', _parent=recording)
     #                     self.add_new_entity(layer)
     #
     #                     # for r in tqdm.tqdm(range(random.randint(400, 800)), desc='Rois', position=2, leave=False):
     #                     r_num = random.randint(200, 400)
     #                     print(f'>>> Add {r_num} Rois')
     #                     for r in range(r_num):
-    #                         roi = Roi(self, _id=f'Roi_{r}', _parent=layer)
+    #                         roi = Roi(_entarchy=self, _id=f'Roi_{r}', _parent=layer)
     #                         self.add_new_entity(roi)
     #
     #                         for jj in range(5):

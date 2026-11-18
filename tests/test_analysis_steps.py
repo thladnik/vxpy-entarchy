@@ -149,9 +149,9 @@ class TestProcessRecordingGuards:
         ent = VxEntarchy.create(base, SQLiteBackend(base, dbname='partial.db'))
         try:
             with ent:
-                animal = Animal(ent, _id='a', _parent=ent.root)
+                animal = Animal(_entarchy=ent, _id='a', _parent=ent.root)
                 ent.add_new_entity(animal)
-                recording = Recording(ent, _id='r', _parent=animal)
+                recording = Recording(_entarchy=ent, _id='r', _parent=animal)
                 ent.add_new_entity(recording)
 
             functions.process_recording(recording)
