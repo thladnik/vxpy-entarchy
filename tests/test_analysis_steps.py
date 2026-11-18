@@ -150,9 +150,9 @@ class TestProcessRecordingGuards:
         try:
             with ent:
                 animal = Animal(_entarchy=ent, _id='a', _parent=ent.root)
-                ent.add_new_entity(animal)
+                ent.add_entity(animal)
                 recording = Recording(_entarchy=ent, _id='r', _parent=animal)
-                ent.add_new_entity(recording)
+                ent.add_entity(recording)
 
             functions.process_recording(recording)
 
