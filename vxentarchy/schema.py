@@ -1445,7 +1445,7 @@ class VxEntarchy(entarchy.Entarchy):
     #
     #         # for i in tqdm.tqdm(range(3), desc='Animals', position=0):
     #         for i in range(3):
-    #             animal = Animal(_entarchy=self, _id=f'Animal_{i}', _parent=self.root)
+    #             animal = Animal(f'Animal_{i}')
     #             print(f'Add {animal}')
     #             for k, v in {'age': random.randint(24, 96),
     #                          'weight': random.randint(20, 100) / 10,
@@ -1453,13 +1453,13 @@ class VxEntarchy(entarchy.Entarchy):
     #                          'zstack': np.random.randint(0, 255, size=(50, 512, 512), dtype=np.uint8)}.items():
     #                 animal[k] = v
     #
-    #             self.add_entity(animal)
+    #             self.add_child(animal)
     #
     #             # for j in tqdm.tqdm(range(7), desc='Recordings', position=1, leave=False):
     #             for j in range(random.randint(2, 4)):
-    #                 recording = Recording(_entarchy=self, _id=f'Recording_{j}', _parent=animal)
+    #                 recording = Recording(f'Recording_{j}')
     #                 print(f'> Add {recording}')
-    #                 self.add_entity(recording)
+    #                 animal.add_child(recording)
     #
     #                 for jj in range(5):
     #                     recording[f'rec_param_int_{jj}'] = random.randint(0, 1000)
@@ -1480,8 +1480,8 @@ class VxEntarchy(entarchy.Entarchy):
     #                 p_num = 300
     #                 print(f'>> Add {p_num} Phases')
     #                 for p in range(p_num):
-    #                     phase = Phase(_entarchy=self, _id=f'Phase_{p}', _parent=recording)
-    #                     self.add_entity(phase)
+    #                     phase = Phase(f'Phase_{p}')
+    #                     recording.add_child(phase)
     #
     #                     for jj in range(5):
     #                         phase[f'phase_param_int_{jj}'] = random.randint(0, 1000)
@@ -1497,15 +1497,15 @@ class VxEntarchy(entarchy.Entarchy):
     #                 for li in range(5):
     #
     #                     print('>> Add Layer', li)
-    #                     layer = Layer(_entarchy=self, _id=f'Layer_{li}', _parent=recording)
-    #                     self.add_entity(layer)
+    #                     layer = Layer(f'Layer_{li}')
+    #                     recording.add_child(layer)
     #
     #                     # for r in tqdm.tqdm(range(random.randint(400, 800)), desc='Rois', position=2, leave=False):
     #                     r_num = random.randint(200, 400)
     #                     print(f'>>> Add {r_num} Rois')
     #                     for r in range(r_num):
-    #                         roi = Roi(_entarchy=self, _id=f'Roi_{r}', _parent=layer)
-    #                         self.add_entity(roi)
+    #                         roi = Roi(f'Roi_{r}')
+    #                         layer.add_child(roi)
     #
     #                         for jj in range(5):
     #                             roi[f'roi_param_int_{jj}'] = random.randint(0, 1000)

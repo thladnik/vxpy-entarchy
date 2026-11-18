@@ -143,16 +143,14 @@ class TestProcessRecordingGuards:
     def test_recording_without_imaging_is_skipped(self, tmp_path, capsys):
         """A recording may legitimately have no imaging, and this analysis is
         about calcium signals."""
-        from vxentarchy.schema import Animal, Recording
+        from vxentarchy.schema import Animal, Experiment, Recording
 
         base = (tmp_path / 'partial').as_posix()
         ent = VxEntarchy.create(base, SQLiteBackend(base, dbname='partial.db'))
         try:
             with ent:
-                animal = Animal(_entarchy=ent, _id='a', _parent=ent.root)
-                ent.add_entity(animal)
-                recording = Recording(_entarchy=ent, _id='r', _parent=animal)
-                ent.add_entity(recording)
+                animal = ent.add_child(Experiment, 'e').add_child(Animal, 'a')
+                recording = animal.add_child(Recording, 'r')
 
             functions.process_recording(recording)
 
