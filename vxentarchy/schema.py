@@ -107,23 +107,23 @@ class Experiment(entarchy.Entity):
 
     @property
     def animals(self) -> AnimalCollection:
-        return self.entarchy.get(Animal, f'[Experiment]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Animal)  # type: ignore[return-value]
 
     @property
     def recordings(self) -> RecordingCollection:
-        return self.entarchy.get(Recording, f'[Experiment]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Recording)  # type: ignore[return-value]
 
     @property
     def phases(self) -> PhaseCollection:
-        return self.entarchy.get(Phase, f'[Experiment]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Phase)  # type: ignore[return-value]
 
     @property
     def layers(self) -> LayerCollection:
-        return self.entarchy.get(Layer, f'[Experiment]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Layer)  # type: ignore[return-value]
 
     @property
     def rois(self) -> RoiCollection:
-        return self.entarchy.get(Roi, f'[Experiment]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Roi)  # type: ignore[return-value]
 
 
 class Animal(entarchy.Entity):
@@ -135,15 +135,15 @@ class Animal(entarchy.Entity):
 
     @property
     def recordings(self) -> RecordingCollection:
-        return self.entarchy.get(Recording, f'[Animal]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Recording)  # type: ignore[return-value]
 
     @property
     def layers(self) -> LayerCollection:
-        return self.entarchy.get(Layer, f'[Animal]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Layer)  # type: ignore[return-value]
 
     @property
     def rois(self) -> RoiCollection:
-        return self.entarchy.get(Roi, f'[Animal]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Roi)  # type: ignore[return-value]
 
 
 class Recording(entarchy.Entity):
@@ -157,20 +157,20 @@ class Recording(entarchy.Entity):
 
     @property
     def phases(self) -> PhaseCollection:
-        return self.entarchy.get(Phase, f'[Recording]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Phase)  # type: ignore[return-value]
 
     @property
     def imaging(self) -> ImagingCollection:
         """The imaging sources of this recording. May be empty."""
-        return self.entarchy.get(Imaging, f'[Recording]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Imaging)  # type: ignore[return-value]
 
     @property
     def layers(self) -> LayerCollection:
-        return self.entarchy.get(Layer, f'[Recording]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Layer)  # type: ignore[return-value]
 
     @property
     def rois(self) -> RoiCollection:
-        return self.entarchy.get(Roi, f'[Recording]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Roi)  # type: ignore[return-value]
 
     def sole_imaging(self) -> 'Imaging':
         """The one imaging source, when asking without naming one is unambiguous."""
@@ -207,11 +207,11 @@ class Imaging(entarchy.Entity):
 
     @property
     def layers(self) -> LayerCollection:
-        return self.entarchy.get(Layer, f'[Imaging]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Layer)  # type: ignore[return-value]
 
     @property
     def rois(self) -> RoiCollection:
-        return self.entarchy.get(Roi, f'[Imaging]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Roi)  # type: ignore[return-value]
 
 
 class Phase(entarchy.Entity):
@@ -249,7 +249,7 @@ class Layer(entarchy.Entity):
 
     @property
     def rois(self) -> RoiCollection:
-        return self.entarchy.get(Roi, f'[Layer]uuid == "{self.uuid}"')  # type: ignore[return-value]
+        return self.get(Roi)  # type: ignore[return-value]
         # return get_collection_as[RoiCollection](self.schema, Roi, f'[Recording]uuid == "{self.uuid}"')
 
     @property
