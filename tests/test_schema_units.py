@@ -53,9 +53,6 @@ class TestHierarchyDeclaration:
         for entity_type in (Animal, Recording, Imaging, Layer, Roi, Phase):
             assert issubclass(entity_type, entarchy.Entity)
 
-    def test_version_is_declared(self):
-        assert VxEntarchy._implementation_version in VxEntarchy._implementation_compat_version_list
-
 
 class TestUnravelDict:
 

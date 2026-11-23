@@ -694,13 +694,12 @@ def scan_experiment(path: str) -> list[tuple[str, list[str]]]:
 
 class VxEntarchy(entarchy.Entarchy):
 
-    # 0.3 put an Imaging entity between Recording and Layer, so that imaging is
-    #  one source among possibly several rather than a property of the recording
-    # 0.4 put an Experiment above Animal, so that which animals belong together
-    #  is a level of the hierarchy rather than a string written on each of them
-    _implementation_compat_version_list = ['0.4']
-    _implementation_version = '0.4'
-
+    # A store is compatible when it has this tree, under these parents; anything
+    #  else that grew on it comes along. The tree has changed twice: an Imaging
+    #  entity went between Recording and Layer, so that imaging is one source
+    #  among possibly several rather than a property of the recording, and an
+    #  Experiment went above Animal, so that which animals belong together is a
+    #  level of the hierarchy rather than a string written on each of them.
     _entity_types = (Experiment,)
 
     def add_experiment(self, path: str, imaging='auto', name: str = None,
@@ -1433,97 +1432,6 @@ class VxEntarchy(entarchy.Entarchy):
             for k in ['x', 'y', 'z']:
                 rois[f'ants/{k}'] = rois['index'].apply(
                     lambda idx: roi_coordinates.iloc[idx][k])
-
-    # @schema.digest_method
-    # def test_digest(self) -> None:
-    #
-    #     import random
-    #
-    #     # Use in context to control commits
-    #     #  and speed up adding multiple entities and their attributes
-    #     with self:
-    #
-    #         # for i in tqdm.tqdm(range(3), desc='Animals', position=0):
-    #         for i in range(3):
-    #             animal = Animal(f'Animal_{i}')
-    #             print(f'Add {animal}')
-    #             for k, v in {'age': random.randint(24, 96),
-    #                          'weight': random.randint(20, 100) / 10,
-    #                          'strain': random.choice(['jf1', 'mpn400', 'jf7']),
-    #                          'zstack': np.random.randint(0, 255, size=(50, 512, 512), dtype=np.uint8)}.items():
-    #                 animal[k] = v
-    #
-    #             self.add_child(animal)
-    #
-    #             # for j in tqdm.tqdm(range(7), desc='Recordings', position=1, leave=False):
-    #             for j in range(random.randint(2, 4)):
-    #                 recording = Recording(f'Recording_{j}')
-    #                 print(f'> Add {recording}')
-    #                 animal.add_child(recording)
-    #
-    #                 for jj in range(5):
-    #                     recording[f'rec_param_int_{jj}'] = random.randint(0, 1000)
-    #                 for jj in range(5):
-    #                     recording[f'rec_param_float_{jj}'] = random.randint(0, 10000) / 10
-    #                 for jj in range(5):
-    #                     recording[f'rec_param_string_{jj}'] = random.choice(['foo', 'bar', 'baz', 'lorem', 'ipsum', 'dolor'])
-    #                 for jj in range(5):
-    #                     recording[f'rec_param_array_{jj}'] = np.random.rand(random.randint(10, 100))
-    #                 for jj in range(5):
-    #                     recording[f'rec_param_list_{jj}'] = [random.randint(0, 100) for _ in range(random.randint(10, 100))]
-    #                 for jj in range(2):
-    #                     recording[f'rec_param_largelist_{jj}'] = ['abc'] * 20_000_000
-    #                 for jj in range(2):
-    #                     recording[f'rec_param_largearray_{jj}'] = np.random.rand(*np.random.randint(50, 150, size=(3,)))
-    #
-    #                 # for p in tqdm.tqdm(range(300), desc='Phases', position=2, leave=False):
-    #                 p_num = 300
-    #                 print(f'>> Add {p_num} Phases')
-    #                 for p in range(p_num):
-    #                     phase = Phase(f'Phase_{p}')
-    #                     recording.add_child(phase)
-    #
-    #                     for jj in range(5):
-    #                         phase[f'phase_param_int_{jj}'] = random.randint(0, 1000)
-    #                     for jj in range(5):
-    #                         phase[f'phase_param_float_{jj}'] = random.randint(0, 10000) / 10
-    #                     for jj in range(5):
-    #                         phase[f'phase_param_string_{jj}'] = random.choice(['foo', 'bar', 'baz', 'lorem', 'ipsum', 'dolor'])
-    #                     for jj in range(5):
-    #                         phase[f'phase_param_array_{jj}'] = np.random.rand(random.randint(10, 100))
-    #                     for jj in range(5):
-    #                         phase[f'phase_param_list_{jj}'] = [random.randint(0, 100) for _ in range(random.randint(10, 100))]
-    #
-    #                 for li in range(5):
-    #
-    #                     print('>> Add Layer', li)
-    #                     layer = Layer(f'Layer_{li}')
-    #                     recording.add_child(layer)
-    #
-    #                     # for r in tqdm.tqdm(range(random.randint(400, 800)), desc='Rois', position=2, leave=False):
-    #                     r_num = random.randint(200, 400)
-    #                     print(f'>>> Add {r_num} Rois')
-    #                     for r in range(r_num):
-    #                         roi = Roi(f'Roi_{r}')
-    #                         layer.add_child(roi)
-    #
-    #                         for jj in range(5):
-    #                             roi[f'roi_param_int_{jj}'] = random.randint(0, 1000)
-    #                         for jj in range(5):
-    #                             roi[f'roi_param_float_{jj}'] = random.randint(0, 10000) / 10
-    #                         for jj in range(5):
-    #                             roi[f'roi_param_string_{jj}'] = random.choice(['foo', 'bar', 'baz', 'lorem', 'ipsum', 'dolor'])
-    #                         for jj in range(5):
-    #                             roi[f'roi_param_array_{jj}'] = np.random.rand(random.randint(10, 100))
-    #                         for jj in range(5):
-    #                             roi[f'roi_param_list_{jj}'] = [random.randint(0, 100) for _ in range(random.randint(10, 100))]
-    #                         for jj in range(2):
-    #                             roi[f'roi_param_largelist_{jj}'] = ['abc'] * 2_000_000
-    #                         for jj in range(2):
-    #                             roi[f'roi_param_largearray_{jj}'] = np.random.rand(*np.random.randint(1, 70, size=(3,)))
-    #
-    #                     # Commit after each layer
-    #                     self.commit()
 
 
 # Where Windows starts refusing paths. Directories cap lower than files, so one
