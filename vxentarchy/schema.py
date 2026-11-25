@@ -327,6 +327,31 @@ class FrameTiming:
                 if not name.startswith('_')}
 
 
+def read_io_channel(path: str, signal: str, signal_time: str) -> tuple[np.ndarray, np.ndarray]:
+    """A channel of Io.hdf5 and its timestamps, each squeezed to one dimension.
+
+    A channel that is not there is how a frame timing shows itself to be the
+    wrong one for a rig: a recording without a galvo trace cannot be timed from
+    one. So the error says what the file does have, and that the timing is a
+    choice to pass rather than a defect of the file.
+    """
+    io_path = os.path.join(path, 'Io.hdf5')
+    with h5py.File(io_path, 'r') as io_file:
+        missing = [name for name in (signal, signal_time) if name not in io_file]
+        if missing:
+            present = sorted(name for name in io_file.keys()
+                             if 'sync' in name.lower() or 'mirror' in name.lower())
+            raise KeyError(
+                f'{io_path} has no channel {", ".join(missing)}. Channels in it that '
+                f'look like a frame sync: {", ".join(present) if present else "none"}. '
+                f'How frames were timed is a choice per experiment, not something the '
+                f'file says: pass the timing that matches this rig, e.g. '
+                f'ClockDivisionTiming(edges_per_volume, signal="di_frame_sync") or '
+                f'--timing clock-division --edges-per-volume ... --signal di_frame_sync.')
+
+        return np.squeeze(io_file[signal][:]), np.squeeze(io_file[signal_time][:])
+
+
 class SyncSignalTiming(FrameTiming):
     """Frame times recovered from an analog channel of Io.hdf5.
 
@@ -348,9 +373,7 @@ class SyncSignalTiming(FrameTiming):
         self.frame_avg_num = frame_avg_num
 
     def all_frame_times(self, path: str) -> np.ndarray:
-        with h5py.File(os.path.join(path, 'Io.hdf5'), 'r') as io_file:
-            sync_data = np.squeeze(io_file[self.signal])[:]
-            sync_data_times = np.squeeze(io_file[self.signal_time])[:]
+        sync_data, sync_data_times = read_io_channel(path, self.signal, self.signal_time)
 
         return frame_time_methods[self.method](sync_data, sync_data_times)[1]
 
@@ -390,9 +413,7 @@ class ClockDivisionTiming(FrameTiming):
         self.signal_time = f'{signal}_time' if signal_time is None else signal_time
 
     def edge_times(self, path: str) -> np.ndarray:
-        with h5py.File(os.path.join(path, 'Io.hdf5'), 'r') as io_file:
-            sync_data = np.squeeze(io_file[self.signal])[:]
-            sync_data_times = np.squeeze(io_file[self.signal_time])[:]
+        sync_data, sync_data_times = read_io_channel(path, self.signal, self.signal_time)
 
         return ca_frame_times_from_sync_toggle(sync_data, sync_data_times)[1]
 

@@ -353,3 +353,43 @@ class TestFrameTimeMethodRegistry:
     def test_unknown_method_raises(self):
         with pytest.raises(KeyError):
             frame_time_methods['does_not_exist']
+
+
+class TestMissingSyncChannel:
+    """A timing that reads a channel the rig did not record says so usefully.
+
+    The default timing reads the galvo mirror, and a rig that records a digital
+    frame clock instead used to fail with h5py's bare "object doesn't exist".
+    """
+
+    @staticmethod
+    def write_io(tmp_path, **channels):
+        import h5py
+        with h5py.File(tmp_path / 'Io.hdf5', 'w') as io_file:
+            for name, data in channels.items():
+                io_file.create_dataset(name, data=data)
+        return tmp_path.as_posix()
+
+    def test_the_error_names_the_channels_present(self, tmp_path):
+        from vxentarchy.schema import SyncSignalTiming
+        path = self.write_io(tmp_path, di_frame_sync=np.zeros((10, 1), dtype=bool),
+                             di_frame_sync_time=np.arange(10.0)[:, None], ai_other=np.zeros(10))
+
+        with pytest.raises(KeyError, match='ai_y_mirror_in.*di_frame_sync, di_frame_sync_time'):
+            SyncSignalTiming().frame_times(path, 1)
+
+    def test_the_other_way_round(self, tmp_path):
+        from vxentarchy.schema import ClockDivisionTiming
+        path = self.write_io(tmp_path, ai_y_mirror_in=np.zeros(10), ai_y_mirror_in_time=np.arange(10.0))
+
+        with pytest.raises(KeyError, match='di_frame_sync.*ai_y_mirror_in'):
+            ClockDivisionTiming(7.5).frame_times(path, 1)
+
+    def test_a_present_channel_reads_as_before(self, tmp_path):
+        from vxentarchy.schema import read_io_channel
+        path = self.write_io(tmp_path, di_frame_sync=np.array([[0], [1], [1], [0]], dtype=bool),
+                             di_frame_sync_time=np.arange(4.0)[:, None])
+
+        signal, times = read_io_channel(path, 'di_frame_sync', 'di_frame_sync_time')
+        assert signal.shape == (4,) and times.shape == (4,)
+        assert signal.tolist() == [False, True, True, False]
