@@ -3,10 +3,12 @@ import os
 
 import numpy as np
 import pytest
+import yaml
 
 from entarchy.backend import SQLiteBackend
 from vxentarchy.schema import (Animal, Experiment, Imaging, ImagingSource,
-                                          ImagingSpec, Layer, Phase, Recording, Roi,
+                                          ImagingSpec, Layer, MissingFrameTiming,
+                                          Phase, Recording, Roi, SyncSignalTiming,
                                           VxEntarchy, imaging_sources,
                                           is_recording_folder, scan_experiment)
 
@@ -280,21 +282,18 @@ class TestTheImagingChoiceCannotSilentlyChange:
 
         assert len(ent.get(Experiment)) == 1
 
-    def test_naming_the_default_timing_is_not_a_different_choice(self, ent,
-                                                                 dataset):
-        """Otherwise the guard cries wolf at the spelling rather than the
-        choice, and somebody learns to work around it."""
-        from vxentarchy.schema import SyncSignalTiming
-
+    def test_naming_a_timing_is_a_different_choice_from_reading_it(self, ent,
+                                                                   dataset):
+        """Each recording timed from its own metadata, and every recording
+        timed the way a script says, are two ways of reading an experiment -
+        even where they agree on this one folder."""
         ent.add_experiment(dataset['root'], imaging=ImagingSpec(source='suite2p'),
                            skip_broken=False)
 
-        # The same thing said out loud: sync_signal is the suite2p default
-        ent.add_experiment(dataset['root'], skip_broken=False,
-                           imaging=ImagingSpec(source='suite2p',
-                                               timing=SyncSignalTiming()))
-
-        assert len(ent.get(Experiment)) == 1
+        with pytest.raises(ValueError, match='per recording'):
+            ent.add_experiment(dataset['root'], skip_broken=False,
+                               imaging=ImagingSpec(source='suite2p', timing=SyncSignalTiming(
+                                   'ymirror', 'ai_y_mirror_in')))
 
     def test_a_different_timing_is_refused(self, ent, dataset):
         """The guard fires before anything is ingested, so the second choice
@@ -317,12 +316,14 @@ class TestTheImagingChoiceCannotSilentlyChange:
             ent.add_experiment(dataset['root'], imaging='auto', skip_broken=False)
 
     def test_the_message_names_what_differs(self, ent, dataset):
-        ent.add_experiment(dataset['root'], skip_broken=False,
-                           imaging=ImagingSpec(source='suite2p', frame_avg_num=1))
+        def averaged(frame_avg_num):
+            return ImagingSpec(source='suite2p', timing=SyncSignalTiming(
+                'ymirror', 'ai_y_mirror_in', frame_avg_num=frame_avg_num))
+
+        ent.add_experiment(dataset['root'], skip_broken=False, imaging=averaged(1))
 
         with pytest.raises(ValueError) as caught:
-            ent.add_experiment(dataset['root'], skip_broken=False,
-                               imaging=ImagingSpec(source='suite2p', frame_avg_num=3))
+            ent.add_experiment(dataset['root'], skip_broken=False, imaging=averaged(3))
 
         message = str(caught.value)
         assert 'frame_avg_num' in message
@@ -346,10 +347,8 @@ class TestImagingChoiceIsRecorded:
     """How frames were timed cannot be detected, so it has to be written down."""
 
     def test_an_explicit_timing_is_stored_on_the_experiment(self, ent, dataset):
-        from vxentarchy.schema import SyncSignalTiming
-
         spec = ImagingSpec(source='suite2p',
-                           timing=SyncSignalTiming(method='y_mirror',
+                           timing=SyncSignalTiming(method='ymirror',
                                                    signal='ai_y_mirror_in'))
         experiment = ent.add_experiment(dataset['root'], imaging=spec,
                                         skip_broken=False)
@@ -357,31 +356,26 @@ class TestImagingChoiceIsRecorded:
         assert experiment['imaging'] == 'suite2p'
         assert experiment['imaging/suite2p/source'] == 'suite2p'
         assert experiment['imaging/suite2p/timing/type'] == 'SyncSignalTiming'
-        assert experiment['imaging/suite2p/timing/method'] == 'y_mirror'
+        assert experiment['imaging/suite2p/timing/method'] == 'ymirror'
         assert experiment['imaging/suite2p/timing/signal'] == 'ai_y_mirror_in'
         # and it is a record of an ingest that worked, not of one that failed
         assert len(experiment.rois) > 0
 
-    def test_an_unknown_timing_is_caught_before_anything_is_ingested(self, ent,
-                                                                     dataset):
-        """Recording the choice means resolving it, which means a name that
-        resolves to nothing fails now rather than on the first recording."""
-        spec = ImagingSpec(source='suite2p', timing='no_such_timing')
+    def test_a_timing_is_an_instance_not_a_name(self):
+        """A name would have to resolve to a default configuration, and there
+        is none: which line a rig recorded is never assumed."""
+        with pytest.raises(TypeError, match='FrameTiming instance'):
+            ImagingSpec(source='suite2p', timing='sync_signal')
 
-        with pytest.raises(ValueError, match='Unknown frame timing'):
-            ent.add_experiment(dataset['root'], imaging=spec)
-
-        assert len(ent.get(Recording)) == 0
-
-    def test_a_timing_that_varies_per_recording_says_so(self, ent, dataset):
-        """frame_avg_num may be a function of the animal and recording, and
-        then there is no one timing that holds for the experiment."""
-        spec = ImagingSpec(source='suite2p',
-                           frame_avg_num=lambda animal, recording: 1)
-        experiment = ent.add_experiment(dataset['root'], imaging=spec,
+    def test_timing_read_from_the_folders_says_so(self, ent, dataset):
+        """Each recording brings its own, so nothing about it holds for the
+        experiment except where it came from."""
+        experiment = ent.add_experiment(dataset['root'],
+                                        imaging=ImagingSpec(source='suite2p'),
                                         skip_broken=False)
 
         assert experiment['imaging/suite2p/timing/type'] == 'per recording'
+        assert experiment['imaging/suite2p/timing/source'] == 'metadata.yaml'
 
     def test_auto_says_so(self, ent, dataset):
         experiment = ent.add_experiment(dataset['root'], imaging='auto')
@@ -395,17 +389,175 @@ class TestImagingChoiceIsRecorded:
         assert len(experiment.rois) == 0
 
     def test_timing_config_covers_every_timing(self):
-        from vxentarchy.schema import (CameraTiming, ClockDivisionTiming,
-                                                  SyncSignalTiming)
+        from vxentarchy.schema import CameraTiming, ClockDivisionTiming
 
-        assert SyncSignalTiming(method='y_mirror').config == {
-            'method': 'y_mirror', 'signal': 'ai_y_mirror_in',
+        assert SyncSignalTiming('ymirror', 'ai_y_mirror_in').config == {
+            'method': 'ymirror', 'signal': 'ai_y_mirror_in',
             'signal_time': 'ai_y_mirror_in_time', 'frame_avg_num': 1}
         assert ClockDivisionTiming(7.5).config == {
             'edges_per_volume': 7.5, 'signal': 'di_frame_sync',
             'signal_time': 'di_frame_sync_time'}
         assert CameraTiming('fish_embedded').config == {
             'device': 'fish_embedded', 'file_name': 'Camera.hdf5'}
+
+
+class TestTimingFromRecordingMetadata:
+    """A recording folder with an imaging source says in its metadata.yaml how
+    its frames were timed. One that does not is reported and left out whole."""
+
+    @staticmethod
+    def build(tmp_path, **kwargs):
+        return _synthetic_data.build_dataset((tmp_path / 'data').as_posix(), **kwargs)
+
+    def test_the_source_records_what_the_metadata_said(self, ingested):
+        _, _, _, recording = ingested
+        imaging = recording.sole_imaging()
+
+        assert imaging['timing'] == 'sync_signal'
+        assert imaging['timing/method'] == 'ymirror'
+        assert imaging['timing/signal'] == 'ai_y_mirror_in'
+        assert imaging['timing/signal_time'] == 'ai_y_mirror_in_time'
+        assert imaging['timing/frame_avg_num'] == 1
+
+    def test_the_keys_stay_on_the_recording_as_metadata(self, ingested):
+        _, _, _, recording = ingested
+
+        assert recording['metadata/frame_sync_signal_type'] == 'ymirror'
+        assert recording['metadata/frame_sync_signal'] == 'ai_y_mirror_in'
+
+    def test_folders_without_it_are_left_out_and_listed_at_the_end(self, ent, tmp_path,
+                                                                    capsys):
+        root = (tmp_path / 'mixed').as_posix()
+        _synthetic_data.build_dataset(root, animal_id='fish1', recording_id='rec_01')
+        _synthetic_data.build_dataset(root, animal_id='fish1', recording_id='rec_02',
+                                      with_timing_metadata=False)
+        _synthetic_data.build_dataset(root, animal_id='fish2', recording_id='rec_01',
+                                      with_timing_metadata=False)
+
+        experiment = ent.add_experiment(root)
+        printed = capsys.readouterr().out
+
+        # Left out whole: no recording entity without its imaging
+        assert [(r.animal.id, r.id) for r in ent.get(Recording)] == [('fish1', 'rec_01')]
+        assert len(experiment.rois) > 0
+
+        # Reported as each is met ...
+        assert printed.count('NO FRAME TIMING') == 2
+
+        # ... and all of them listed after the summary, with what they need
+        summary = printed.rindex('2 without frame timing')
+        closing = printed[summary:]
+        assert '2 recordings have an imaging source but no frame timing' in closing
+        assert os.path.join('fish1', 'rec_02') in closing
+        assert os.path.join('fish2', 'rec_01') in closing
+        assert os.path.join('fish1', 'rec_01') not in closing
+        for key in ('frame_sync_signal_type', 'frame_sync_signal', 'frame_sync_signal_timing'):
+            assert key in closing
+
+    def test_a_rerun_picks_it_up_once_the_metadata_is_there(self, ent, tmp_path):
+        dataset = self.build(tmp_path, with_timing_metadata=False)
+        ent.add_experiment(dataset['root'])
+        assert len(ent.get(Recording)) == 0
+
+        with open(os.path.join(dataset['recording_path'], 'metadata.yaml'), 'w') as f:
+            yaml.safe_dump(_synthetic_data.TIMING_METADATA, f)
+
+        experiment = ent.add_experiment(dataset['root'], skip_broken=False)
+
+        assert len(experiment.recordings) == 1
+        assert len(experiment.rois) > 0
+        assert experiment.recordings[0].sole_imaging()['timing/method'] == 'ymirror'
+
+    def test_stopping_on_errors_stops_on_this_one_too(self, ent, tmp_path):
+        dataset = self.build(tmp_path, with_timing_metadata=False)
+
+        with pytest.raises(MissingFrameTiming, match='frame_sync_signal_type'):
+            ent.add_experiment(dataset['root'], skip_broken=False)
+
+        assert len(ent.get(Recording)) == 0
+
+    def test_add_recording_creates_nothing(self, ent, tmp_path):
+        dataset = self.build(tmp_path, with_timing_metadata=False)
+        animal = ent.add_animal(EXPERIMENT, dataset['animal_path'])
+
+        with pytest.raises(MissingFrameTiming) as caught:
+            ent.add_recording(animal, dataset['recording_path'])
+
+        assert len(ent.get(Recording)) == 0
+        assert len(ent.get(Imaging)) == 0
+        # The folder has a metadata file; it is the entry that is missing
+        assert 'recording_metadata.yaml' in str(caught.value)
+
+    def test_a_folder_with_no_metadata_file_at_all_says_so(self, ent, tmp_path):
+        dataset = self.build(tmp_path, with_timing_metadata=False)
+        os.remove(os.path.join(dataset['recording_path'], 'recording_metadata.yaml'))
+        animal = ent.add_animal(EXPERIMENT, dataset['animal_path'])
+
+        with pytest.raises(MissingFrameTiming, match='has no metadata.yaml'):
+            ent.add_recording(animal, dataset['recording_path'])
+
+    def test_a_folder_without_imaging_needs_none(self, ent, tmp_path):
+        dataset = self.build(tmp_path, with_suite2p=False, with_timing_metadata=False)
+
+        experiment = ent.add_experiment(dataset['root'], skip_broken=False)
+
+        assert len(experiment.recordings) == 1
+        assert not experiment.recordings[0]['has_imaging']
+
+    def test_leaving_the_imaging_out_needs_none(self, ent, tmp_path):
+        dataset = self.build(tmp_path, with_timing_metadata=False)
+
+        experiment = ent.add_experiment(dataset['root'], imaging=None, skip_broken=False)
+
+        assert len(experiment.recordings) == 1
+
+    def test_a_timing_passed_in_stands_in_for_it(self, ent, tmp_path):
+        dataset = self.build(tmp_path, with_timing_metadata=False)
+        spec = ImagingSpec(source='suite2p',
+                           timing=SyncSignalTiming('ymirror', 'ai_y_mirror_in'))
+
+        experiment = ent.add_experiment(dataset['root'], imaging=spec, skip_broken=False)
+
+        assert experiment.recordings[0].sole_imaging()['timing/method'] == 'ymirror'
+
+    def test_an_unknown_type_is_a_failure_not_a_missing_entry(self, ent, tmp_path, capsys):
+        dataset = self.build(tmp_path, extra_metadata={'frame_sync_signal_type': 'galvo'})
+
+        ent.add_experiment(dataset['root'])
+        printed = capsys.readouterr().out
+
+        assert len(ent.get(Recording)) == 0
+        assert '0 without frame timing, 1 failed' in printed
+        assert 'unknown frame_sync_signal_type "galvo"' in printed
+
+    def test_layer_num_is_checked_against_what_the_source_wrote(self, ent, tmp_path):
+        dataset = self.build(tmp_path, extra_metadata={'layer_num': 3})
+
+        with pytest.raises(ValueError, match='layer_num: 3.*wrote 2 layers'):
+            ent.add_experiment(dataset['root'], skip_broken=False)
+
+        assert len(ent.get(Recording)) == 0
+
+    def test_a_layer_num_that_agrees_passes(self, ent, tmp_path):
+        dataset = self.build(tmp_path, extra_metadata={'layer_num': 2})
+
+        experiment = ent.add_experiment(dataset['root'], skip_broken=False)
+
+        assert experiment.recordings[0].sole_imaging()['layer_num'] == 2
+
+    def test_frame_avg_num_comes_from_the_metadata(self, ent, tmp_path):
+        """Two frames averaged into one halves the rate: 20 mirror half-cycles
+        a second, over 2 planes, over 2."""
+        times = _synthetic_data.expected_frame_times()
+        frame_num = min(len(times[1::4]), len(times[2::4]))
+        dataset = self.build(tmp_path, extra_metadata={'frame_avg_num': 2},
+                             frames_per_plane=[frame_num, frame_num])
+
+        experiment = ent.add_experiment(dataset['root'], skip_broken=False)
+        imaging = experiment.recordings[0].sole_imaging()
+
+        assert imaging['timing/frame_avg_num'] == 2
+        assert imaging['rate'] == pytest.approx(5.0, rel=0.05)
 
 
 class TestAddRecording:

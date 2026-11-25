@@ -11,7 +11,8 @@ from vxentarchy import schema
 from vxentarchy.schema import (Animal, ClockDivisionTiming, Experiment,
                                           Imaging, Layer,
                                           Phase, Recording, Roi, VxEntarchy,
-                                          ca_frame_times_from_sync_toggle,
+                                          ca_frame_times_from_start_pulse,
+                                          ca_frame_times_from_toggle,
                                           ca_frame_times_from_y_mirror,
                                           frame_time_methods, unravel_dict)
 
@@ -170,7 +171,8 @@ class TestFrameTimesFromYMirror:
         assert np.array_equal(centred, offset)
 
 
-class TestFrameTimesFromSyncToggle:
+class TestFrameTimesFromStartPulse:
+    """A line that pulses once per frame: the rise is the frame start."""
 
     def test_detects_rising_edges(self):
         """The frame time is the first sample recorded high, not the last one
@@ -178,19 +180,19 @@ class TestFrameTimesFromSyncToggle:
         signal = np.array([0, 0, 1, 1, 0, 0, 1, 1, 0])
         times = np.arange(len(signal), dtype=float)
 
-        indices, frame_times = ca_frame_times_from_sync_toggle(signal, times)
+        indices, frame_times = ca_frame_times_from_start_pulse(signal, times)
         assert np.array_equal(frame_times, [2.0, 6.0])
 
     def test_ignores_falling_edges(self):
         signal = np.array([1, 1, 0, 0, 0])
         times = np.arange(len(signal), dtype=float)
 
-        _, frame_times = ca_frame_times_from_sync_toggle(signal, times)
+        _, frame_times = ca_frame_times_from_start_pulse(signal, times)
         assert len(frame_times) == 0
 
     def test_constant_signal_yields_no_frames(self):
         times = np.arange(10, dtype=float)
-        _, frame_times = ca_frame_times_from_sync_toggle(np.ones(10), times)
+        _, frame_times = ca_frame_times_from_start_pulse(np.ones(10), times)
         assert len(frame_times) == 0
 
     def test_a_boolean_line_counts_each_frame_once(self):
@@ -200,7 +202,7 @@ class TestFrameTimesFromSyncToggle:
         signal = np.array([0, 0, 1, 1, 0, 0, 1, 1, 0], dtype=bool)
         times = np.arange(len(signal), dtype=float)
 
-        _, frame_times = ca_frame_times_from_sync_toggle(signal, times)
+        _, frame_times = ca_frame_times_from_start_pulse(signal, times)
         assert np.array_equal(frame_times, [2.0, 6.0])
 
     def test_a_boolean_line_matches_an_integer_one(self):
@@ -208,9 +210,56 @@ class TestFrameTimesFromSyncToggle:
         signal = rng.integers(0, 2, size=500).astype(bool)
         times = np.arange(len(signal), dtype=float)
 
-        _, from_bool = ca_frame_times_from_sync_toggle(signal, times)
-        _, from_int = ca_frame_times_from_sync_toggle(signal.astype(np.int8), times)
+        _, from_bool = ca_frame_times_from_start_pulse(signal, times)
+        _, from_int = ca_frame_times_from_start_pulse(signal.astype(np.int8), times)
         assert np.array_equal(from_bool, from_int)
+
+
+class TestFrameTimesFromToggle:
+    """A line that flips state at each frame start: the level means nothing,
+    the change does."""
+
+    def test_every_flip_is_a_frame(self):
+        signal = np.array([0, 0, 1, 1, 0, 0, 1, 1, 0])
+        times = np.arange(len(signal), dtype=float)
+
+        indices, frame_times = ca_frame_times_from_toggle(signal, times)
+        assert np.array_equal(indices, [2, 4, 6, 8])
+        assert np.array_equal(frame_times, [2.0, 4.0, 6.0, 8.0])
+
+    def test_a_fall_counts_as_a_rise_does(self):
+        signal = np.array([1, 1, 0, 0, 0])
+        times = np.arange(len(signal), dtype=float)
+
+        _, frame_times = ca_frame_times_from_toggle(signal, times)
+        assert np.array_equal(frame_times, [2.0])
+
+    def test_constant_signal_yields_no_frames(self):
+        times = np.arange(10, dtype=float)
+        _, frame_times = ca_frame_times_from_toggle(np.ones(10), times)
+        assert len(frame_times) == 0
+
+    def test_a_boolean_line_matches_an_integer_one(self):
+        rng = np.random.default_rng(0)
+        signal = rng.integers(0, 2, size=500).astype(bool)
+        times = np.arange(len(signal), dtype=float)
+
+        _, from_bool = ca_frame_times_from_toggle(signal, times)
+        _, from_int = ca_frame_times_from_toggle(signal.astype(np.int8), times)
+        assert np.array_equal(from_bool, from_int)
+
+    def test_it_is_not_the_start_pulse_reading(self):
+        """The same line read both ways: a toggle has a frame on every edge, a
+        start pulse only on the rises - which is why the metadata has to say
+        which of the two the rig recorded."""
+        signal = np.tile([0, 0, 1, 1], 10)
+        times = np.arange(len(signal), dtype=float)
+
+        _, toggled = ca_frame_times_from_toggle(signal, times)
+        _, pulsed = ca_frame_times_from_start_pulse(signal, times)
+        assert len(toggled) == 19
+        assert len(pulsed) == 10
+        assert set(pulsed) < set(toggled)
 
 
 def _sync_line(tmp_path, edge_num: int, samples_per_period: int = 40,
@@ -346,9 +395,10 @@ class TestLongPath:
 class TestFrameTimeMethodRegistry:
 
     def test_registered_methods(self):
-        assert set(frame_time_methods) == {'y_mirror', 'frame_sync_toggle'}
-        assert frame_time_methods['y_mirror'] is ca_frame_times_from_y_mirror
-        assert frame_time_methods['frame_sync_toggle'] is ca_frame_times_from_sync_toggle
+        assert set(frame_time_methods) == {'ymirror', 'toggle', 'startpulse'}
+        assert frame_time_methods['ymirror'] is ca_frame_times_from_y_mirror
+        assert frame_time_methods['toggle'] is ca_frame_times_from_toggle
+        assert frame_time_methods['startpulse'] is ca_frame_times_from_start_pulse
 
     def test_unknown_method_raises(self):
         with pytest.raises(KeyError):
@@ -358,8 +408,8 @@ class TestFrameTimeMethodRegistry:
 class TestMissingSyncChannel:
     """A timing that reads a channel the rig did not record says so usefully.
 
-    The default timing reads the galvo mirror, and a rig that records a digital
-    frame clock instead used to fail with h5py's bare "object doesn't exist".
+    Metadata that names the galvo mirror on a rig that records a digital frame
+    clock instead used to fail with h5py's bare "object doesn't exist".
     """
 
     @staticmethod
@@ -376,7 +426,15 @@ class TestMissingSyncChannel:
                              di_frame_sync_time=np.arange(10.0)[:, None], ai_other=np.zeros(10))
 
         with pytest.raises(KeyError, match='ai_y_mirror_in.*di_frame_sync, di_frame_sync_time'):
-            SyncSignalTiming().frame_times(path, 1)
+            SyncSignalTiming('ymirror', 'ai_y_mirror_in').frame_times(path, 1)
+
+    def test_the_error_points_at_the_metadata(self, tmp_path):
+        from vxentarchy.schema import SyncSignalTiming
+        path = self.write_io(tmp_path, di_frame_sync=np.zeros((10, 1), dtype=bool),
+                             di_frame_sync_time=np.arange(10.0)[:, None])
+
+        with pytest.raises(KeyError, match='metadata.yaml.*frame_sync_signal_type'):
+            SyncSignalTiming('ymirror', 'ai_y_mirror_in').frame_times(path, 1)
 
     def test_the_other_way_round(self, tmp_path):
         from vxentarchy.schema import ClockDivisionTiming
@@ -393,3 +451,118 @@ class TestMissingSyncChannel:
         signal, times = read_io_channel(path, 'di_frame_sync', 'di_frame_sync_time')
         assert signal.shape == (4,) and times.shape == (4,)
         assert signal.tolist() == [False, True, True, False]
+
+
+class TestSyncSignalTimingHasNoDefault:
+    """Which line a rig recorded is written down, never assumed."""
+
+    def test_method_and_signal_are_required(self):
+        from vxentarchy.schema import SyncSignalTiming
+
+        with pytest.raises(TypeError):
+            SyncSignalTiming()
+
+    def test_an_unknown_method_names_the_known_ones(self):
+        from vxentarchy.schema import SyncSignalTiming
+
+        with pytest.raises(ValueError, match='startpulse, toggle, ymirror'):
+            SyncSignalTiming('y_mirror', 'ai_y_mirror_in')
+
+    def test_the_time_channel_follows_the_signal_unless_named(self):
+        from vxentarchy.schema import SyncSignalTiming
+
+        assert SyncSignalTiming('toggle', 'di_frame_sync').signal_time == 'di_frame_sync_time'
+        assert SyncSignalTiming('toggle', 'di_frame_sync', 'clock').signal_time == 'clock'
+
+
+class TestTimingFromMetadata:
+    """What a recording folder's metadata.yaml says about its frame timing."""
+
+    METADATA = {'frame_sync_signal_type': 'ymirror',
+                'frame_sync_signal': 'ai_y_mirror_in',
+                'frame_sync_signal_timing': 'ai_y_mirror_in_time'}
+
+    def test_metadata_that_says_nothing_gives_none(self):
+        assert schema.timing_from_metadata({'repeat_num': 2}) is None
+
+    @pytest.mark.parametrize('kind', ['ymirror', 'toggle', 'startpulse'])
+    def test_the_signal_types(self, kind):
+        timing = schema.timing_from_metadata({'frame_sync_signal_type': kind,
+                                              'frame_sync_signal': 'di_frame_sync',
+                                              'frame_sync_signal_timing': 'di_frame_sync_time'})
+
+        assert isinstance(timing, schema.SyncSignalTiming)
+        assert timing.config == {'method': kind, 'signal': 'di_frame_sync',
+                                 'signal_time': 'di_frame_sync_time', 'frame_avg_num': 1}
+
+    def test_the_time_points_are_the_ones_named(self):
+        timing = schema.timing_from_metadata({**self.METADATA,
+                                              'frame_sync_signal_timing': 'some_clock'})
+
+        assert timing.signal_time == 'some_clock'
+
+    def test_frame_avg_num_is_optional(self):
+        timing = schema.timing_from_metadata({**self.METADATA, 'frame_avg_num': 4})
+
+        assert timing.frame_avg_num == 4
+
+    def test_the_type_is_read_without_regard_to_case(self):
+        timing = schema.timing_from_metadata({**self.METADATA,
+                                              'frame_sync_signal_type': 'YMirror'})
+
+        assert timing.method == 'ymirror'
+
+    def test_an_unknown_type_names_the_known_ones(self):
+        with pytest.raises(ValueError, match='unknown frame_sync_signal_type "galvo".*'
+                                             'startpulse, toggle, ymirror'):
+            schema.timing_from_metadata({**self.METADATA,
+                                         'frame_sync_signal_type': 'galvo'}, '/rec')
+
+    def test_a_type_without_its_signal_is_an_error_not_a_silence(self):
+        with pytest.raises(ValueError, match='frame_sync_signal and frame_sync_signal_timing'):
+            schema.timing_from_metadata({'frame_sync_signal_type': 'toggle'}, '/rec')
+
+    def test_a_type_without_its_time_points(self):
+        with pytest.raises(ValueError, match='no frame_sync_signal_timing'):
+            schema.timing_from_metadata({'frame_sync_signal_type': 'toggle',
+                                         'frame_sync_signal': 'di_frame_sync'}, '/rec')
+
+    def test_a_divided_clock_can_be_written_down_too(self):
+        timing = schema.timing_from_metadata({'frame_sync_signal_type': 'clockdivision',
+                                              'frame_sync_signal': 'di_frame_sync',
+                                              'frame_sync_signal_timing': 'di_frame_sync_time',
+                                              'frame_sync_edges_per_volume': 7.5})
+
+        assert isinstance(timing, ClockDivisionTiming)
+        assert timing.config == {'edges_per_volume': 7.5, 'signal': 'di_frame_sync',
+                                 'signal_time': 'di_frame_sync_time'}
+
+    def test_a_divided_clock_needs_its_ratio(self):
+        with pytest.raises(ValueError, match='frame_sync_edges_per_volume'):
+            schema.timing_from_metadata({'frame_sync_signal_type': 'clockdivision',
+                                         'frame_sync_signal': 'di_frame_sync',
+                                         'frame_sync_signal_timing': 'di_frame_sync_time'})
+
+
+class TestReadMetadata:
+
+    def test_a_folder_without_metadata_reads_as_empty(self, tmp_path):
+        assert schema.read_metadata(tmp_path.as_posix()) == {}
+        assert schema.metadata_files_in(tmp_path.as_posix()) == []
+
+    def test_the_files_are_merged(self, tmp_path):
+        with open(tmp_path / 'metadata.yaml', 'w') as f:
+            yaml.safe_dump({'frame_sync_signal_type': 'toggle'}, f)
+        with open(tmp_path / 'recording_metadata.yaml', 'w') as f:
+            yaml.safe_dump({'repeat_num': 2}, f)
+        (tmp_path / 'notes.txt').write_text('not metadata')
+
+        assert schema.read_metadata(tmp_path.as_posix()) == {
+            'frame_sync_signal_type': 'toggle', 'repeat_num': 2}
+        assert schema.metadata_files_in(tmp_path.as_posix()) == [
+            'metadata.yaml', 'recording_metadata.yaml']
+
+    def test_an_empty_file_contributes_nothing(self, tmp_path):
+        (tmp_path / 'metadata.yaml').write_text('')
+
+        assert schema.read_metadata(tmp_path.as_posix()) == {}

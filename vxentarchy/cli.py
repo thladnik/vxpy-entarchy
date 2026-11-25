@@ -8,15 +8,12 @@
 - and may be run again whenever the folder has grown, since animals and
 recordings already in the entarchy are skipped.
 
-Frame timing cannot be detected and is named here rather than guessed:
-
-    python -m vxentarchy add /data/entarchy /raw/rot_trans \\
-        --imaging suite2p --timing clock-division --edges-per-volume 7.5 \\
-        --signal di_frame_sync
-
-Whatever is named is written onto the Experiment, so the entarchy records how it
-read its own data. Handing the same experiment a different timing later is
-refused rather than silently applied to the recordings that come after.
+How frames were timed cannot be detected: each recording folder says so in its
+metadata.yaml (`frame_sync_signal_type`, `frame_sync_signal`,
+`frame_sync_signal_timing`). A folder with imaging output and no such entry is
+reported, listed at the end, and left out until it has one. The choice is
+written onto the Experiment and onto each Imaging entity, so the entarchy
+records how it read its own data.
 """
 from __future__ import annotations
 
@@ -24,8 +21,7 @@ import argparse
 import os
 import sys
 
-from .schema import (CameraTiming, ClockDivisionTiming, ImagingSpec,
-                     VxEntarchy, SyncSignalTiming, scan_experiment)
+from .schema import ImagingSpec, VxEntarchy, lacks_frame_timing, scan_experiment
 
 CONFIG_NAME = 'entarchy.yaml'
 
@@ -64,58 +60,14 @@ def _backend_config(args) -> tuple[str, dict | None]:
                             'dbuser': args.dbuser}
 
 
-def _timing_from_args(args):
-    """The FrameTiming the timing options name, or None if none was named."""
-    named = {'--signal': args.signal, '--method': args.method,
-             '--edges-per-volume': args.edges_per_volume, '--device': args.device}
-    given = sorted(name for name, value in named.items() if value is not None)
-
-    if args.timing is None:
-        if given:
-            raise SystemExit(f'{", ".join(given)} configures a frame timing, but '
-                             f'none was chosen. Add --timing.')
-        return None
-
-    if args.timing == 'sync-signal':
-        options = {name: value for name, value in
-                   (('method', args.method), ('signal', args.signal))
-                   if value is not None}
-        return SyncSignalTiming(frame_avg_num=args.frame_avg_num, **options)
-
-    if args.timing == 'clock-division':
-        if args.edges_per_volume is None:
-            raise SystemExit(
-                '--timing clock-division needs --edges-per-volume. It is the '
-                'volume period measured in clock ticks and cannot be guessed: '
-                'measure it as edges/volumes on a recording where both are '
-                'known, then check that it reproduces the frame count of the '
-                'others.')
-
-        options = {} if args.signal is None else {'signal': args.signal}
-        return ClockDivisionTiming(args.edges_per_volume, **options)
-
-    if args.device is None:
-        raise SystemExit('--timing camera needs --device, the camera whose frame '
-                         'times to use.')
-
-    return CameraTiming(args.device)
-
-
 def _imaging_from_args(args):
     """What `add_experiment(imaging=...)` should be given."""
-    timing = _timing_from_args(args)
+    if args.imaging == 'none':
+        return None
+    if args.imaging == 'auto':
+        return 'auto'
 
-    if args.imaging in ('auto', 'none'):
-        if timing is not None or args.frame_avg_num != 1:
-            raise SystemExit(
-                f'--imaging {args.imaging} leaves the source and its timing to '
-                f'the defaults, so the timing options would be ignored. Name a '
-                f'source instead, e.g. --imaging suite2p.')
-
-        return None if args.imaging == 'none' else 'auto'
-
-    return ImagingSpec(source=args.imaging, timing=timing,
-                       frame_avg_num=args.frame_avg_num)
+    return ImagingSpec(source=args.imaging)
 
 
 def _contents(folder: str, limit: int = None) -> list:
@@ -135,13 +87,25 @@ def _contents(folder: str, limit: int = None) -> list:
     return contents
 
 
-def _print_contents(folder: str, contents: list) -> None:
+def _print_contents(folder: str, contents: list, check_timing: bool = True) -> None:
     print(f'\n{folder}')
     for animal_path, recordings in contents:
         print(f'  {os.path.basename(animal_path):<46} {len(recordings)} recordings')
 
     print(f'  {"":<46} {len(contents)} animals, '
           f'{sum(len(r) for _, r in contents)} recordings')
+
+    if not check_timing:
+        return
+
+    # Named before a run that may take hours, as well as at the end of it
+    untimed = [recording for _, recordings in contents for recording in recordings
+               if lacks_frame_timing(recording)]
+    if len(untimed) > 0:
+        print(f'\n  {len(untimed)} recordings have imaging output but no frame timing in '
+              f'their metadata.yaml, and are left out until they do:')
+        for recording in untimed:
+            print(f'    {recording}')
 
 
 def _open(args) -> VxEntarchy:
@@ -174,7 +138,7 @@ def _add(args) -> int:
     #  mistake in either is an error now rather than halfway through a run
     imaging = _imaging_from_args(args)
     contents = _contents(args.folder, args.limit)
-    _print_contents(args.folder, contents)
+    _print_contents(args.folder, contents, check_timing=imaging is not None)
 
     if args.dry_run:
         return 0
@@ -251,26 +215,12 @@ def main(argv=None) -> int:
                                  'instead of reporting it and carrying on')
 
     imaging_group = add_parser.add_argument_group(
-        'imaging', 'which signals to take, and how their frames were timed')
+        'imaging', 'which signals to take; how their frames were timed is read '
+                   'from each recording folder\'s metadata.yaml')
     imaging_group.add_argument('--imaging', default='auto',
                                help='"auto" for every source found in the folder, '
                                     '"none" for stimulus and behaviour only, or a '
                                     'source name such as suite2p')
-    imaging_group.add_argument('--timing',
-                               choices=['sync-signal', 'clock-division', 'camera'],
-                               help='how frames are timed; the source default is '
-                                    'used when this is left out')
-    imaging_group.add_argument('--signal', default=None,
-                               help='channel of Io.hdf5 carrying the sync trace')
-    imaging_group.add_argument('--method', default=None,
-                               help='sync-signal only, e.g. y_mirror')
-    imaging_group.add_argument('--edges-per-volume', type=float, default=None,
-                               help='clock-division only: the volume period in '
-                                    'clock ticks, measured rather than guessed')
-    imaging_group.add_argument('--device', default=None,
-                               help='camera only: which camera recorded the times')
-    imaging_group.add_argument('--frame-avg-num', type=int, default=1,
-                               help='how many frames the scanner averaged into one')
 
     _add_backend_options(add_parser)
 

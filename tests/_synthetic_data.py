@@ -208,10 +208,16 @@ def write_suite2p_plane(path, plane_index, roi_num, frame_num):
     return fluorescence
 
 
+TIMING_METADATA = {'frame_sync_signal_type': 'ymirror',
+                   'frame_sync_signal': 'ai_y_mirror_in',
+                   'frame_sync_signal_timing': 'ai_y_mirror_in_time'}
+
+
 def build_dataset(root, animal_id='animal_01', recording_id='rec_01',
                   roi_num=4, plane_num=2, frames_per_plane=None, with_zstack=True,
                   phase_num=None, phase_windows=None, visual_names=None,
-                  with_camera=True, with_video=True, with_suite2p=True):
+                  with_camera=True, with_video=True, with_suite2p=True,
+                  with_timing_metadata=True, extra_metadata=None):
     """Create the folder tree and return a description of what was written.
 
     `with_suite2p=False` leaves the folder without imaging output, which is a
@@ -242,8 +248,15 @@ def build_dataset(root, animal_id='animal_01', recording_id='rec_01',
         tifffile.imwrite(os.path.join(animal_path, 'zstack_1.tif'), zstack,
                          photometric='minisblack')
 
+    # How the frames were timed lives in the recording's metadata, as it does
+    #  on a rig; `with_timing_metadata=False` is the folder somebody forgot
+    recording_metadata = {'repeat_num': 2, 'experimenter': 'tester'}
+    if with_timing_metadata:
+        recording_metadata.update(TIMING_METADATA)
+    if extra_metadata is not None:
+        recording_metadata.update(extra_metadata)
     with open(os.path.join(recording_path, 'recording_metadata.yaml'), 'w') as f:
-        yaml.safe_dump({'repeat_num': 2, 'experimenter': 'tester'}, f)
+        yaml.safe_dump(recording_metadata, f)
 
     write_io_file(recording_path, phase_windows)
     write_display_file(recording_path, phase_windows=phase_windows,

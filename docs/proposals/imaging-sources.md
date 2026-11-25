@@ -4,6 +4,10 @@
 because the alternatives it rejects are the questions anyone changing this will
 ask again. Where the implementation deviated, it says so.
 
+Since 2026-11-25 frame timing is no longer named by the caller or defaulted per
+source: each recording folder names it in its `metadata.yaml`, see the README.
+The `timing=` names and `frame_avg_num=` arguments shown below are gone.
+
 A Recording currently *is* a two-photon recording processed by suite2p. That is
 not stated anywhere; it is implied by what `add_recording` does and what it
 crashes on. This proposal separates three things the code treats as one — a

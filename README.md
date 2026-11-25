@@ -63,29 +63,61 @@ python -m vxentarchy scan /raw/cmn
 holds no entarchy is an error rather than a new empty one, so a typo costs
 nothing.
 
-Frame timing is named rather than guessed:
-
-```bash
-python -m vxentarchy add /data/entarchy /raw/rot_trans \
-    --imaging suite2p --timing clock-division \
-    --edges-per-volume 7.5 --signal di_frame_sync
-```
-
-Options that would be silently ignored are refused — `--signal` without
-`--timing`, `--timing clock-division` without its measured ratio, any timing
-option under `--imaging auto` — and all of that is checked before the entarchy is
-opened, so a mistake costs nothing rather than half a run. `add` exits non-zero
-and names any recording in the folder that did not make it in.
+`--imaging` is `auto` for every source found in a recording folder, `none` for
+stimulus and behaviour only, or a source name such as `suite2p`. How the frames
+were timed is not an option: each recording folder says so in its
+`metadata.yaml`, see below. `scan`, `--dry-run` and `add` all name the
+recordings that have imaging output but no frame timing before anything is
+opened, and `add` exits non-zero and names any recording in the folder that did
+not make it in.
 
 `--backend mysql` with `--dbname/--dbhost/--dbuser` creates on a server instead.
 The password is never an argument: it comes from `ENTARCHY_DB_PASSWORD` or a
 prompt, and is not written to `entarchy.yaml`.
 
-**Frame timing is chosen per experiment, and recorded there.** It cannot be
-detected — a rig that recorded no galvo mirror trace has to be timed from a
-divided clock whose ratio was measured by hand — so whatever is passed to
-`add_experiment` is written onto the Experiment under `imaging/`, and the
-entarchy says how it read its own data:
+**Frame timing is written in each recording folder.** It cannot be detected
+from the data, and guessing which line a rig recorded is how frames end up timed
+wrongly without anybody noticing. So a recording folder that holds an imaging
+source (a `suite2p` subfolder, say) needs a `metadata.yaml` that names it:
+
+```yaml
+frame_sync_signal_type: ymirror                 # ymirror, toggle or startpulse
+frame_sync_signal: ai_y_mirror_in               # channel of Io.hdf5
+frame_sync_signal_timing: ai_y_mirror_in_time   # its time points
+frame_avg_num: 1                                # optional: frames averaged into one
+layer_num: 5                                    # optional: checked against the source
+```
+
+| `frame_sync_signal_type` | the signal | a frame starts at |
+|---|---|---|
+| `ymirror` | the galvo y mirror position | each turning point of the mirror |
+| `toggle` | a line that flips state once per frame | every edge, rising or falling |
+| `startpulse` | a line that pulses once per frame | each rising edge |
+
+`frame_avg_num` is taken as 1 when left out. `layer_num` is never needed - the
+number of layers is what the source wrote, e.g. the `plane*` folders of suite2p -
+but when it is given and disagrees, the recording fails rather than being
+ingested with the wrong one. A fourth type, `clockdivision`, reads a free-running
+clock that ticks a non-integer number of times per volume, and takes that
+measured ratio as `frame_sync_edges_per_volume`.
+
+A recording that has an imaging source and no `frame_sync_signal_type` is
+reported when the ingest reaches it, left out whole - no recording entity
+without its imaging - and listed with all the others at the end of the run. A
+rerun picks it up once the metadata is there. A folder without an imaging
+source needs none of this, and neither does `imaging=None`.
+
+What a recording was timed with is written onto its Imaging entity, and the
+Experiment says where that came from:
+
+```python
+imaging['timing/method']                     # 'ymirror'
+imaging['timing/signal']                     # 'ai_y_mirror_in'
+experiment['imaging/suite2p/timing/type']    # 'per recording'
+```
+
+A `FrameTiming` passed in applies to every recording of the run instead of what
+the folders say, for an experiment whose folders cannot be given metadata:
 
 ```python
 ent.add_experiment('/data/rot_trans', imaging=ImagingSpec(

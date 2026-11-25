@@ -141,25 +141,24 @@ class TestAdd:
         assert ent.get(Experiment)[0]['imaging'] == 'none'
         ent.backend.close()
 
-    def test_the_timing_reaches_the_experiment(self, destination, dataset):
-        main(['add', destination, dataset['root'], '--create',
-              '--imaging', 'suite2p', '--timing', 'sync-signal',
-              '--method', 'y_mirror', '--signal', 'ai_y_mirror_in'])
+    def test_the_timing_comes_from_the_recording_folder(self, destination, dataset):
+        main(['add', destination, dataset['root'], '--create', '--imaging', 'suite2p'])
 
         ent = opened(destination)
         experiment = ent.get(Experiment)[0]
-        assert experiment['imaging/suite2p/timing/type'] == 'SyncSignalTiming'
-        assert experiment['imaging/suite2p/timing/method'] == 'y_mirror'
-        assert experiment['imaging/suite2p/timing/signal'] == 'ai_y_mirror_in'
+        assert experiment['imaging/suite2p/timing/type'] == 'per recording'
+        assert experiment['imaging/suite2p/timing/source'] == 'metadata.yaml'
+
+        imaging = experiment.recordings[0].sole_imaging()
+        assert imaging['timing/method'] == 'ymirror'
+        assert imaging['timing/signal'] == 'ai_y_mirror_in'
         ent.backend.close()
 
-    def test_a_second_run_may_not_retime_it(self, destination, dataset):
-        main(['add', destination, dataset['root'], '--create',
-              '--imaging', 'suite2p', '--frame-avg-num', '1'])
+    def test_a_second_run_may_not_change_the_imaging_choice(self, destination, dataset):
+        main(['add', destination, dataset['root'], '--create', '--imaging', 'suite2p'])
 
         with pytest.raises(ValueError, match='a different imaging choice'):
-            main(['add', destination, dataset['root'],
-                  '--imaging', 'suite2p', '--frame-avg-num', '2'])
+            main(['add', destination, dataset['root'], '--imaging', 'none'])
 
     def test_a_recording_that_did_not_make_it_exits_non_zero(self, destination,
                                                              dataset, monkeypatch,
@@ -178,41 +177,60 @@ class TestAdd:
         assert f'{dataset["animal_id"]}/{dataset["recording_id"]}' in printed
 
 
-class TestTimingOptions:
-    """Options that would be silently ignored are refused instead."""
+class TestFrameTimingMetadata:
+    """Frame timing is read from each recording folder, not from the command
+    line; a folder that does not say is named before, during and after."""
 
-    def test_a_timing_option_without_a_timing(self, destination, dataset):
-        with pytest.raises(SystemExit, match='none was chosen'):
-            main(['add', destination, dataset['root'], '--signal', 'di_frame_sync'])
+    @pytest.fixture()
+    def forgotten(self, dataset):
+        return _synthetic_data.build_dataset(dataset['root'], animal_id='fish2',
+                                             recording_id='rec_01',
+                                             with_timing_metadata=False)
 
-    def test_clock_division_without_its_ratio(self, destination, dataset):
-        with pytest.raises(SystemExit, match='needs --edges-per-volume'):
-            main(['add', destination, dataset['root'],
-                  '--imaging', 'suite2p', '--timing', 'clock-division'])
-
-    def test_camera_without_a_device(self, destination, dataset):
-        with pytest.raises(SystemExit, match='needs --device'):
-            main(['add', destination, dataset['root'],
-                  '--imaging', 'suite2p', '--timing', 'camera'])
-
-    def test_timing_options_under_auto(self, destination, dataset):
-        with pytest.raises(SystemExit, match='would be ignored'):
-            main(['add', destination, dataset['root'],
-                  '--imaging', 'auto', '--timing', 'sync-signal'])
-
-    def test_frame_avg_num_under_auto(self, destination, dataset):
-        with pytest.raises(SystemExit, match='would be ignored'):
-            main(['add', destination, dataset['root'],
-                  '--imaging', 'auto', '--frame-avg-num', '2'])
-
-    def test_the_options_are_checked_before_the_entarchy_is_opened(self, destination,
-                                                                   dataset):
-        """So a mistake costs nothing rather than half an ingest."""
-        with pytest.raises(SystemExit, match='needs --edges-per-volume'):
-            main(['add', destination, dataset['root'], '--create',
-                  '--imaging', 'suite2p', '--timing', 'clock-division'])
+    @pytest.mark.parametrize('option', [['--timing', 'sync-signal'],
+                                        ['--signal', 'di_frame_sync'],
+                                        ['--edges-per-volume', '7.5'],
+                                        ['--frame-avg-num', '2']])
+    def test_there_are_no_timing_options(self, destination, dataset, option):
+        with pytest.raises(SystemExit):
+            main(['add', destination, dataset['root'], '--create'] + option)
 
         assert not os.path.exists(destination)
+
+    def test_a_recording_without_it_is_listed_and_exits_non_zero(self, destination,
+                                                                 dataset, forgotten,
+                                                                 capsys):
+        assert main(['add', destination, dataset['root'], '--create']) == 1
+        printed = capsys.readouterr().out
+
+        assert '1 recordings have an imaging source but no frame timing' in printed
+        assert 'did not make it in' in printed
+        assert 'fish2/rec_01' in printed
+
+        ent = opened(destination)
+        assert [(r.animal.id, r.id) for r in ent.get(Recording)] == [
+            (dataset['animal_id'], dataset['recording_id'])]
+        ent.backend.close()
+
+    def test_scan_names_it_beforehand(self, dataset, forgotten, capsys):
+        assert main(['scan', dataset['root']]) == 0
+        printed = capsys.readouterr().out
+
+        assert '1 recordings have imaging output but no frame timing' in printed
+        assert os.path.join('fish2', 'rec_01') in printed
+        assert os.path.join(dataset['animal_id'], dataset['recording_id']) not in printed
+
+    def test_scan_says_nothing_when_every_folder_has_it(self, dataset, capsys):
+        main(['scan', dataset['root']])
+
+        assert 'no frame timing' not in capsys.readouterr().out
+
+    def test_leaving_the_imaging_out_needs_none(self, destination, dataset, forgotten,
+                                                capsys):
+        assert main(['add', destination, dataset['root'], '--create',
+                     '--imaging', 'none']) == 0
+
+        assert 'no frame timing' not in capsys.readouterr().out
 
 
 class TestBackendOptions:

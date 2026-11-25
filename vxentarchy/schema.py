@@ -3,7 +3,7 @@ import os
 import pathlib
 import time
 import traceback
-from typing import Callable, TypeVar, cast, overload
+from typing import TypeVar, cast, overload
 
 import h5py
 import numpy as np
@@ -344,16 +344,20 @@ def read_io_channel(path: str, signal: str, signal_time: str) -> tuple[np.ndarra
             raise KeyError(
                 f'{io_path} has no channel {", ".join(missing)}. Channels in it that '
                 f'look like a frame sync: {", ".join(present) if present else "none"}. '
-                f'How frames were timed is a choice per experiment, not something the '
-                f'file says: pass the timing that matches this rig, e.g. '
-                f'ClockDivisionTiming(edges_per_volume, signal="di_frame_sync") or '
-                f'--timing clock-division --edges-per-volume ... --signal di_frame_sync.')
+                f'How frames were timed is not something the file says: the recording '
+                f'folder\'s metadata.yaml names it, with {TIMING_TYPE_KEY}, '
+                f'{TIMING_SIGNAL_KEY} and {TIMING_SIGNAL_TIME_KEY}.')
 
         return np.squeeze(io_file[signal][:]), np.squeeze(io_file[signal_time][:])
 
 
 class SyncSignalTiming(FrameTiming):
-    """Frame times recovered from an analog channel of Io.hdf5.
+    """Frame times recovered from a sync channel of Io.hdf5.
+
+    `method` is how the channel marks a frame - `ymirror`, `toggle` or
+    `startpulse`, see `frame_time_methods` - and `signal` the channel. Neither
+    has a default: which line a rig recorded is written in the recording
+    folder's metadata.yaml, not guessed here.
 
     A scanner that visits planes in turn puts every layer_num-th frame in the
     same plane, which is what the slicing below undoes. `frame_avg_num` is how
@@ -361,8 +365,8 @@ class SyncSignalTiming(FrameTiming):
     """
     name = 'sync_signal'
 
-    def __init__(self, method: str = 'y_mirror', signal: str = 'ai_y_mirror_in',
-                 signal_time: str = None, frame_avg_num: int = 1):
+    def __init__(self, method: str, signal: str, signal_time: str = None,
+                 frame_avg_num: int = 1):
         if method not in frame_time_methods:
             raise ValueError(f'Unknown frame timing method "{method}". '
                              f'Known: {", ".join(sorted(frame_time_methods))}.')
@@ -415,7 +419,7 @@ class ClockDivisionTiming(FrameTiming):
     def edge_times(self, path: str) -> np.ndarray:
         sync_data, sync_data_times = read_io_channel(path, self.signal, self.signal_time)
 
-        return ca_frame_times_from_sync_toggle(sync_data, sync_data_times)[1]
+        return ca_frame_times_from_start_pulse(sync_data, sync_data_times)[1]
 
     def frame_times(self, path: str, layer_num: int) -> list:
         edges = self.edge_times(path)
@@ -465,7 +469,6 @@ class ImagingSource:
     under its own name, as suite2p's stats do under `s2p/`.
     """
     name: str = 'source'
-    default_timing: str = 'sync_signal'
 
     def detect(self, path: str) -> bool:
         """Whether this source has output in a recording folder."""
@@ -609,54 +612,113 @@ class Suite2pSource(ImagingSource):
         return None
 
 
+# What a recording folder says about how its frames were timed, in its
+#  metadata.yaml. A folder with an imaging source needs the first three; the
+#  rest are optional. The type names are the recording's vocabulary - a rig
+#  records a mirror, a toggling line or a pulse - and `frame_time_methods`
+#  maps them to the computation.
+TIMING_TYPE_KEY = 'frame_sync_signal_type'          # ymirror, toggle, startpulse, clockdivision
+TIMING_SIGNAL_KEY = 'frame_sync_signal'             # channel of Io.hdf5
+TIMING_SIGNAL_TIME_KEY = 'frame_sync_signal_timing'  # its time points
+TIMING_EDGES_KEY = 'frame_sync_edges_per_volume'    # clockdivision only
+FRAME_AVG_KEY = 'frame_avg_num'                     # optional, default 1
+LAYER_NUM_KEY = 'layer_num'                         # optional, checked against the source
+CLOCK_DIVISION_TYPE = 'clockdivision'
+
+
+class MissingFrameTiming(FileNotFoundError):
+    """A recording folder has an imaging source, but its metadata does not say
+    how the frames were timed. Nothing of the recording is ingested; the digest
+    reports it and lists every such folder at the end, and a rerun with the
+    metadata in place picks it up."""
+
+    def __init__(self, path: str, metadata_files: list):
+        self.path = path
+        self.metadata_files = metadata_files
+        why = (f'{", ".join(metadata_files)} in it has no {TIMING_TYPE_KEY}'
+               if metadata_files else 'it has no metadata.yaml')
+        super().__init__(
+            f'{path} has an imaging source but no frame timing: {why}. A recording '
+            f'with imaging needs {TIMING_TYPE_KEY} (ymirror, toggle, startpulse or '
+            f'{CLOCK_DIVISION_TYPE}), {TIMING_SIGNAL_KEY} and {TIMING_SIGNAL_TIME_KEY} '
+            f'in its metadata.yaml.')
+
+
+def timing_from_metadata(metadata: dict, path: str = '') -> FrameTiming | None:
+    """The FrameTiming a recording's metadata describes, or None if it
+    describes none.
+
+    Incomplete or unknown is an error rather than None: a folder that names a
+    type and gets the rest wrong is not a folder that said nothing.
+    """
+    kind = metadata.get(TIMING_TYPE_KEY)
+    if kind is None:
+        return None
+    kind = str(kind).lower()
+
+    known = sorted(frame_time_methods) + [CLOCK_DIVISION_TYPE]
+    if kind not in known:
+        raise ValueError(f'{path}: unknown {TIMING_TYPE_KEY} "{kind}" in the metadata. '
+                         f'Known: {", ".join(known)}.')
+
+    signal = metadata.get(TIMING_SIGNAL_KEY)
+    signal_time = metadata.get(TIMING_SIGNAL_TIME_KEY)
+    missing = [key for key, value in ((TIMING_SIGNAL_KEY, signal),
+                                      (TIMING_SIGNAL_TIME_KEY, signal_time)) if value is None]
+    if missing:
+        raise ValueError(f'{path}: {TIMING_TYPE_KEY} is "{kind}" but the metadata gives '
+                         f'no {" and ".join(missing)}.')
+
+    if kind == CLOCK_DIVISION_TYPE:
+        edges = metadata.get(TIMING_EDGES_KEY)
+        if edges is None:
+            raise ValueError(f'{path}: {TIMING_TYPE_KEY} {CLOCK_DIVISION_TYPE} needs '
+                             f'{TIMING_EDGES_KEY}, the volume period in clock ticks.')
+        return ClockDivisionTiming(float(edges), signal=str(signal), signal_time=str(signal_time))
+
+    return SyncSignalTiming(method=kind, signal=str(signal), signal_time=str(signal_time),
+                            frame_avg_num=int(metadata.get(FRAME_AVG_KEY, 1)))
+
+
 class ImagingSpec:
     """One imaging source to ingest, and how to time it.
 
-    `source` and `timing` may be names from the registries or instances, so a
-    caller with an unregistered source can pass it directly.
+    `source` may be a name from the registry or an instance, so a caller with
+    an unregistered source can pass it directly. `timing` is a FrameTiming to
+    apply to every recording, or None - the default - to read each recording's
+    timing from its own metadata.yaml (see `timing_from_metadata`).
     """
 
-    def __init__(self, source='suite2p', name: str = None, timing=None,
-                 frame_avg_num=1, **options):
+    def __init__(self, source='suite2p', name: str = None, timing: FrameTiming = None,
+                 **options):
+        if timing is not None and not isinstance(timing, FrameTiming):
+            raise TypeError(f'timing is a FrameTiming instance, or None to read it from '
+                            f'each recording folder; got {timing!r}.')
+
         self.source = imaging_sources[source] if isinstance(source, str) else source
         self.name = self.source.name if name is None else name
-        self.frame_avg_num = frame_avg_num
         self.options = options
         self._timing = timing
 
-    def timing_for(self, animal: Animal, recording: Recording) -> FrameTiming:
-        if isinstance(self._timing, FrameTiming):
+    def timing_for(self, path: str) -> FrameTiming:
+        """How the frames in this recording folder were timed.
+
+        Raises MissingFrameTiming when nothing names it, which an ingest
+        reports rather than fails on.
+        """
+        if self._timing is not None:
             return self._timing
 
-        frame_avg_num = self.frame_avg_num
-        if callable(frame_avg_num):
-            frame_avg_num = frame_avg_num(animal.id, recording.id)
+        timing = timing_from_metadata(read_metadata(path), path)
+        if timing is None:
+            raise MissingFrameTiming(path, metadata_files_in(path))
 
-        name = self.source.default_timing if self._timing is None else self._timing
-        if name == 'sync_signal':
-            return SyncSignalTiming(frame_avg_num=frame_avg_num, **self.options)
-
-        raise ValueError(f'Unknown frame timing "{name}". Pass a FrameTiming instance.')
+        return timing
 
     def resolved_timing(self) -> FrameTiming | None:
-        """The timing this spec will use, where that does not depend on
-        which recording is being read.
-
-        Naming the source default explicitly and leaving it out are the
-        same choice, so an ingest that records what a spec resolved to
-        rather than what it was handed does not see a difference where
-        there is none. None when `frame_avg_num` is a function of the
-        animal and recording, since then there is no one timing to name.
-        """
-        if isinstance(self._timing, FrameTiming):
-            return self._timing
-
-        if callable(self.frame_avg_num):
-            return None
-
-        # timing_for only reaches for those two when frame_avg_num is a
-        #  function of them, which it is not here
-        return self.timing_for(None, None)
+        """The timing applied to every recording, or None when each recording
+        brings its own."""
+        return self._timing
 
     def __repr__(self):
         return f'ImagingSpec({self.name}, source={self.source.name})'
@@ -713,6 +775,15 @@ def scan_experiment(path: str) -> list[tuple[str, list[str]]]:
     return contents
 
 
+def lacks_frame_timing(recording_path: str) -> bool:
+    """Whether a recording folder has an imaging source and no frame timing in
+    its metadata - the folder an ingest reports and leaves out."""
+    if not any(source.detect(recording_path) for source in imaging_sources.values()):
+        return False
+
+    return read_metadata(recording_path).get(TIMING_TYPE_KEY) is None
+
+
 class VxEntarchy(entarchy.Entarchy):
 
     # A store is compatible when it has this tree, under these parents; anything
@@ -737,12 +808,15 @@ class VxEntarchy(entarchy.Entarchy):
             ent.add_experiment('/data/rot_trans', imaging=ImagingSpec(
                 timing=ClockDivisionTiming(7.5, signal='di_frame_sync')))
 
-        The experiment is the right scope for the imaging choice, because that
-        choice cannot be detected and does not vary within one: a rig that
-        recorded no galvo mirror trace has to be timed from a divided clock whose
-        ratio was measured by hand. Whatever is passed here is written onto the
-        Experiment under `imaging/`, so the entarchy records how it read its own
-        data rather than leaving that in the script that happened to run.
+        How frames were timed cannot be detected, so each recording folder says
+        so in its metadata.yaml - `frame_sync_signal_type`, `frame_sync_signal`,
+        `frame_sync_signal_timing` - and a folder with an imaging source and no
+        such entry is reported, listed at the end, and left out whole, so that a
+        rerun picks it up once the metadata is there. A timing passed here
+        applies to every recording instead. Either way the choice is written
+        onto the Experiment under `imaging/` and onto each Imaging entity, so the
+        entarchy records how it read its own data rather than leaving that in
+        the script that happened to run.
 
         Re-running continues rather than duplicating, since `add_animal` and
         `add_recording` both skip what is already there. An ingest that stopped
@@ -789,7 +863,7 @@ class VxEntarchy(entarchy.Entarchy):
         print(f'{len(contents)} animals, {total} recordings')
 
         started = time.time()
-        added, skipped, failed = 0, 0, []
+        added, skipped, failed, untimed = 0, 0, [], []
 
         for animal_path, recording_paths in contents:
             animal_id = os.path.basename(animal_path)
@@ -813,6 +887,12 @@ class VxEntarchy(entarchy.Entarchy):
                     recording = self.add_recording(animal, recording_path,
                                                    imaging=imaging,
                                                    with_video=with_video)
+                except MissingFrameTiming as error:
+                    if not skip_broken:
+                        raise
+                    untimed.append(recording_path)
+                    print(f'NO FRAME TIMING, left out: {error}')
+                    continue
                 except Exception:
                     if not skip_broken:
                         raise
@@ -827,7 +907,16 @@ class VxEntarchy(entarchy.Entarchy):
 
         print(f'\n{"=" * 78}')
         print(f'{experiment.id}: added {added}, skipped {skipped} already present, '
-              f'{len(failed)} failed, in {(time.time() - started) / 60:.1f} min')
+              f'{len(untimed)} without frame timing, {len(failed)} failed, '
+              f'in {(time.time() - started) / 60:.1f} min')
+
+        if len(untimed) > 0:
+            print(f'\n{len(untimed)} recordings have an imaging source but no frame timing '
+                  f'in their metadata.yaml, and were left out. Each needs {TIMING_TYPE_KEY} '
+                  f'(ymirror, toggle, startpulse or {CLOCK_DIVISION_TYPE}), {TIMING_SIGNAL_KEY} '
+                  f'and {TIMING_SIGNAL_TIME_KEY}; a rerun picks them up:')
+            for path in untimed:
+                print(f'  {path}')
 
         for failed_path, error in failed:
             print(f'\n--- {failed_path}\n{error}')
@@ -849,13 +938,13 @@ class VxEntarchy(entarchy.Entarchy):
             prefix = f'imaging/{spec.name}'
             record[f'{prefix}/source'] = spec.source.name
 
-            # What it resolves to rather than what it was handed, so that
-            #  naming the default and leaving it out record the same thing.
-            #  None when the timing varies per recording, and then there is
-            #  nothing about it that holds for the experiment
+            # None when each recording brings its own timing, from its
+            #  metadata, and then nothing about it holds for the experiment;
+            #  each Imaging entity records what it was timed with
             timing = spec.resolved_timing()
             if timing is None:
                 record[f'{prefix}/timing/type'] = 'per recording'
+                record[f'{prefix}/timing/source'] = 'metadata.yaml'
                 continue
 
             record[f'{prefix}/timing/type'] = type(timing).__name__
@@ -1252,8 +1341,7 @@ class VxEntarchy(entarchy.Entarchy):
 
     @entarchy.digest_method
     def add_imaging(self, recording: Recording, source='suite2p', path: str = None,
-                    name: str = None, timing=None, frame_avg_num=1,
-                    **options) -> Imaging:
+                    name: str = None, timing: FrameTiming = None, **options) -> Imaging:
         """Add one imaging source to a recording that already exists.
 
         The recording folder has to be given again rather than remembered: an
@@ -1271,8 +1359,7 @@ class VxEntarchy(entarchy.Entarchy):
                              'does not keep a path it can read from.')
 
         spec = source if isinstance(source, ImagingSpec) else ImagingSpec(
-            source=source, name=name, timing=timing, frame_avg_num=frame_avg_num,
-            **options)
+            source=source, name=name, timing=timing, **options)
 
         with self:
             imaging = self._add_imaging(recording, spec, path,
@@ -1281,12 +1368,19 @@ class VxEntarchy(entarchy.Entarchy):
         return imaging
 
     def _add_imaging(self, recording: Recording, spec: 'ImagingSpec', path: str,
-                     record_groups) -> Imaging:
-        """Ingest one source. Assumes an open write context."""
+                     record_groups, timing: FrameTiming = None) -> Imaging:
+        """Ingest one source. Assumes an open write context.
+
+        `timing` is what `spec.timing_for(path)` gave, when the caller resolved
+        it already - add_recording does, before it creates anything.
+        """
         existing = [source.id for source in recording.imaging]
         if spec.name in existing:
             raise ValueError(f'{recording} already has an imaging source named '
                              f'"{spec.name}".')
+
+        if timing is None:
+            timing = spec.timing_for(path)
 
         layer_names = spec.source.layer_names(path)
         if len(layer_names) == 0:
@@ -1294,13 +1388,22 @@ class VxEntarchy(entarchy.Entarchy):
                 f'Imaging source "{spec.source.name}" found no data in {path}. '
                 f'Use imaging="auto" to ingest whatever is there, or None to skip it.')
 
+        # The folder may say how many layers to expect; a source that wrote
+        #  another number is a folder to look at, not one to ingest
+        declared = read_metadata(path).get(LAYER_NUM_KEY)
+        if declared is not None and int(declared) != len(layer_names):
+            raise ValueError(f'{path}: the metadata says {LAYER_NUM_KEY}: {declared}, but '
+                             f'{spec.source.name} wrote {len(layer_names)} layers.')
+
         print(f'> Add imaging source {spec.name} ({spec.source.name})')
         imaging = recording.add_child(Imaging, spec.name)
         imaging['method'] = spec.source.name
         imaging['layer_num'] = len(layer_names)
 
-        timing = spec.timing_for(recording.animal, recording)
+        # How this recording was timed, on the entity that was timed
         imaging['timing'] = timing.name
+        for key, value in timing.config.items():
+            imaging[f'timing/{key}'] = value
         frame_times_by_layer = timing.frame_times(path, len(layer_names))
 
         spec.source.ingest(imaging, path, frame_times_by_layer, spec.options)
@@ -1322,10 +1425,8 @@ class VxEntarchy(entarchy.Entarchy):
         return imaging
 
     @entarchy.digest_method
-    def add_recording(self, animal: Animal, path: str,
-                      sync_signal: str = None, sync_signal_time: str = None,
-                      sync_type = None, frame_avg_num: int | Callable = 1,
-                      with_video: bool = True, imaging='auto') -> Recording | None:
+    def add_recording(self, animal: Animal, path: str, with_video: bool = True,
+                      imaging='auto') -> Recording | None:
         """Ingest one vxpy recording folder.
 
         Args:
@@ -1333,11 +1434,14 @@ class VxEntarchy(entarchy.Entarchy):
                 every registered source that has data in the folder and skips
                 imaging entirely when none does; None ingests none, leaving a
                 recording of stimulus, io and behaviour data; a name, an
-                ImagingSpec, or a list of either ingests those.
+                ImagingSpec, or a list of either ingests those. How the frames
+                were timed comes from the folder's metadata.yaml unless the
+                ImagingSpec names a timing.
             with_video: take the behaviour videos into the entarchy as media.
-            sync_signal, sync_signal_time, sync_type, frame_avg_num: how frames
-                are timed, for sources that read an analog sync channel. Given
-                per source by an ImagingSpec when they differ.
+
+        Raises:
+            MissingFrameTiming: the folder has an imaging source and nothing
+                says how its frames were timed. Nothing is created.
         """
 
         path = pathlib.Path(path).as_posix()
@@ -1357,22 +1461,14 @@ class VxEntarchy(entarchy.Entarchy):
 
         specs = self._imaging_specs(imaging, path)
 
-        # The old signature named one sync channel for the whole recording; keep
-        #  it working by folding it into the specs that did not say otherwise
-        for spec in specs:
-            if spec._timing is None and (sync_signal is not None or sync_type is not None):
-                spec._timing = SyncSignalTiming(
-                    method='y_mirror' if sync_type is None else sync_type,
-                    signal='ai_y_mirror_in' if sync_signal is None else sync_signal,
-                    signal_time=sync_signal_time,
-                    frame_avg_num=frame_avg_num if spec.frame_avg_num == 1 else spec.frame_avg_num)
-            elif spec.frame_avg_num == 1 and frame_avg_num != 1:
-                spec.frame_avg_num = frame_avg_num
-
         if len(specs) > 0 and not os.path.exists(os.path.join(path, 'Io.hdf5')):
             raise FileNotFoundError(
                 f'{path} has imaging output but no Io.hdf5, so its frames cannot '
                 f'be timed. Pass imaging=None to ingest the rest of it.')
+
+        # Resolved before anything is created, so that a folder which cannot
+        #  say how it was timed leaves nothing behind
+        timings = {spec.name: spec.timing_for(path) for spec in specs}
 
         print(f'Process recording folder {path}')
 
@@ -1396,7 +1492,7 @@ class VxEntarchy(entarchy.Entarchy):
                 self._add_recording_videos(recording, path)
 
             for spec in specs:
-                self._add_imaging(recording, spec, path, record_groups)
+                self._add_imaging(recording, spec, path, record_groups, timings[spec.name])
 
         return recording
 
@@ -1489,28 +1585,37 @@ def long_path(path: str) -> str:
 METADATA_FILE_NAMES = ('metadata.yaml', 'info.yaml')
 
 
-def add_metadata(entity: entarchy.Entity, folder_path: str):
-    """Function searches for and returns metadata on a given folder path
+def metadata_files_in(folder_path: str) -> list[str]:
+    """The metadata files a folder holds, by name."""
+    return sorted(f for f in os.listdir(folder_path) if f.endswith(METADATA_FILE_NAMES))
 
-    Function scans the `folder_path` for metadata yaml files (see
-    `METADATA_FILE_NAMES`) and returns a dictionary containing their contents
+
+def read_metadata(folder_path: str) -> dict:
+    """What a folder's metadata files say, merged into one mapping.
+
+    A file that is not valid YAML is reported and skipped; one that holds no
+    mapping contributes nothing.
     """
-
-    meta_files = [f for f in os.listdir(folder_path)
-                  if f.endswith(METADATA_FILE_NAMES)]
-
-    print(f'Found {len(meta_files)} metadata files in {folder_path}.')
-
     metadata = {}
-    for f in meta_files:
-        with open(os.path.join(folder_path, f), 'r') as stream:
+    for name in metadata_files_in(folder_path):
+        with open(os.path.join(folder_path, name), 'r') as stream:
             try:
-                metadata.update(yaml.safe_load(stream))
+                content = yaml.safe_load(stream)
             except yaml.YAMLError as exc:
                 print(exc)
+                continue
+        if isinstance(content, dict):
+            metadata.update(content)
 
-    # Add metadata
-    unravel_dict(metadata, entity, 'metadata')
+    return metadata
+
+
+def add_metadata(entity: entarchy.Entity, folder_path: str):
+    """Write what the folder's metadata files say onto the entity, under
+    `metadata/`."""
+    print(f'Found {len(metadata_files_in(folder_path))} metadata files in {folder_path}.')
+
+    unravel_dict(read_metadata(folder_path), entity, 'metadata')
 
 
 def _phase_time_window(record_groups, index: int):
@@ -1562,12 +1667,13 @@ def ca_frame_times_from_y_mirror(mirror_position: np.ndarray, mirror_time: np.nd
     return frame_idcs, frame_times
 
 
-def ca_frame_times_from_sync_toggle(sync_signal: np.ndarray, sync_time: np.ndarray):
-    """Frame times from the rising edges of a digital frame sync line.
+def ca_frame_times_from_start_pulse(sync_signal: np.ndarray, sync_time: np.ndarray):
+    """Frame times from a line that pulses once at each frame start.
 
-    A digital line is recorded as bool, and np.diff of a bool array is XOR: a
-    fall reads as True just as a rise does, so every frame would be counted
-    twice. Widening to a signed type first makes a fall negative again.
+    The rising edge of the pulse is the start, so only rises count. A digital
+    line is recorded as bool, and np.diff of a bool array is XOR: a fall reads
+    as True just as a rise does, so every frame would be counted twice.
+    Widening to a signed type first makes a fall negative again.
 
     np.diff reports the gap between samples i and i+1, so the rising sample -
     the first one recorded while the frame was being acquired - is i+1.
@@ -1578,9 +1684,23 @@ def ca_frame_times_from_sync_toggle(sync_signal: np.ndarray, sync_time: np.ndarr
     return frame_indices, frame_times
 
 
+def ca_frame_times_from_toggle(sync_signal: np.ndarray, sync_time: np.ndarray):
+    """Frame times from a line that flips state at each frame start.
+
+    The level carries no meaning, the change does: every edge, rising or
+    falling, is a frame. The first sample after the flip is the frame's.
+    """
+    frame_indices = np.where(np.diff(sync_signal.astype(np.int8)) != 0)[0] + 1
+    frame_times = sync_time[frame_indices]
+
+    return frame_indices, frame_times
+
+
+# The recording's vocabulary for its sync line, as metadata.yaml names it
 frame_time_methods = {
-    'y_mirror': ca_frame_times_from_y_mirror,
-    'frame_sync_toggle': ca_frame_times_from_sync_toggle,
+    'ymirror': ca_frame_times_from_y_mirror,
+    'toggle': ca_frame_times_from_toggle,
+    'startpulse': ca_frame_times_from_start_pulse,
 }
 
 
